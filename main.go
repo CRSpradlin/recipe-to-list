@@ -41,10 +41,10 @@ func main() {
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
 	http.HandleFunc("/", handleRootRequest)
 
-	err := http.ListenAndServe("0.0.0.0:3000", nil)
+	webServerError := http.ListenAndServe("0.0.0.0:3000", nil)
 
-	if err != nil {
-		panic("Error starting web server")
+	if webServerError != nil {
+		panic(errors.Join(webServerError, errors.New("Error listening and serving web server")))
 	}
 
 }
