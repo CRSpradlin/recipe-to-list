@@ -37,6 +37,7 @@ func main() {
 	if dbErr != nil {
 		panic(dbErr)
 	}
+	defer db.Close()
 
 	var recipeCount int
 	db.QueryRow("select count(*) from recipe").Scan(&recipeCount)
@@ -76,7 +77,6 @@ func initSqliteDB() (*sql.DB, error) {
 	if initDBErr != nil {
 		return nil, errors.Join(initDBErr, errors.New("Could not open a connection to the database file."))
 	}
-	defer initDB.Close()
 
 	_, dbSchemaInitErr := initDB.Exec(SQLITE_DB_SCHEMA)
 
@@ -98,6 +98,7 @@ func handleRecipeUpdate(recipe Recipe) (Recipe, error) {
 		if stmtPrepareError != nil {
 			return recipe, errors.Join(stmtPrepareError, errors.New("Could not prepare statement for recipe create."))
 		}
+		defer stmt.Close()
 
 		result, stmtExecErr := stmt.Exec(strings.Join(recipe.ingredients, "|"))
 		if stmtExecErr != nil {
@@ -121,6 +122,11 @@ func handleRecipeUpdate(recipe Recipe) (Recipe, error) {
 		if stmtExecErr != nil {
 			return recipe, errors.Join(stmtExecErr, errors.New("Could not execute the recipe update query statement."))
 		}
+	}
+
+	txCommitErr := tx.Commit()
+	if txCommitErr != nil {
+		return recipe, errors.Join(txCommitErr, errors.New("Could not commit the recipe update/create statement."))
 	}
 
 	return recipe, nil
