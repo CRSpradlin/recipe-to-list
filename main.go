@@ -19,13 +19,21 @@ const SQLITE_FILE_NAME = "db.sqlite"
 const SQLITE_DB_SCHEMA = `
 	create table if not exists recipes (
 		id integer not null primary key,
+		name text not null,
 		ingredients text not null
 	);
 `
 
+const RECIPE_INGREDIENTS_DEL = "|"
+
 type Recipe struct {
-	id          *int64
-	ingredients []string
+	ID          *int64
+	Name        string
+	Ingredients []string
+}
+
+type RootView struct {
+	Recipes []Recipe
 }
 
 var db *sql.DB
@@ -40,10 +48,18 @@ func main() {
 	defer db.Close()
 
 	var recipeCount int
-	db.QueryRow("select count(*) from recipe").Scan(&recipeCount)
+	db.QueryRow("select count(*) from recipes").Scan(&recipeCount)
 	log.Info("Database Initialized", "Recipe Count", recipeCount)
 
-	log.Info("Preparing web server...")
+	var newRecipe = Recipe{nil, "test recipe", []string{"apple", "pie"}}
+	newRecipe, recipeCreateErr := updateRecipe(newRecipe)
+	if recipeCreateErr != nil {
+		panic(recipeCreateErr)
+	}
+
+	log.Info("New Recipe Added", "ID", *(newRecipe.ID), "Name", newRecipe.Name, "Ingredients", newRecipe.Ingredients)
+
+	log.Info("Listening from web server...")
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
 	http.HandleFunc("/", handleRootRequest)
 
@@ -87,20 +103,52 @@ func initSqliteDB() (*sql.DB, error) {
 	return initDB, nil
 }
 
-func handleRecipeUpdate(recipe Recipe) (Recipe, error) {
+func getAllRecipes() ([]Recipe, error) {
+	recipes := []Recipe{}
+
+	rows, queryRowsError := db.Query("select id, name, ingredients from recipes")
+	if queryRowsError != nil {
+		return nil, errors.Join(queryRowsError, errors.New("Failed to query all recipes."))
+	}
+
+	for rows.Next() {
+		var id int64
+		var name string
+		var ingredientsStr string
+
+		scanErr := rows.Scan(&id, &name, &ingredientsStr)
+		if scanErr != nil {
+			return nil, errors.Join(scanErr, errors.New("Unable to scan for next row within get all recipes db query."))
+		}
+		ingredients := strings.Split(ingredientsStr, RECIPE_INGREDIENTS_DEL)
+
+		newRecipe := Recipe{
+			ID:          &id,
+			Name:        name,
+			Ingredients: ingredients,
+		}
+		log.Info("Recipe Found", "ID", newRecipe.ID, "Name", newRecipe.Name, "Ingredients", strings.Join(newRecipe.Ingredients, ","))
+		recipes = append(recipes, newRecipe)
+	}
+
+	rows.Close()
+	return recipes, nil
+}
+
+func updateRecipe(recipe Recipe) (Recipe, error) {
 	tx, dbBeginErr := db.Begin()
 	if dbBeginErr != nil {
 		return recipe, errors.Join(dbBeginErr, errors.New("Could not start database tx for recipe create/update."))
 	}
 
-	if recipe.id == nil {
-		stmt, stmtPrepareError := tx.Prepare("insert into recipes(ingredients) values(?)")
+	if recipe.ID == nil {
+		stmt, stmtPrepareError := tx.Prepare("insert into recipes(name,ingredients) values(?,?)")
 		if stmtPrepareError != nil {
 			return recipe, errors.Join(stmtPrepareError, errors.New("Could not prepare statement for recipe create."))
 		}
 		defer stmt.Close()
 
-		result, stmtExecErr := stmt.Exec(strings.Join(recipe.ingredients, "|"))
+		result, stmtExecErr := stmt.Exec(recipe.Name, strings.Join(recipe.Ingredients, "|"))
 		if stmtExecErr != nil {
 			return recipe, errors.Join(stmtExecErr, errors.New("Could not execute the create recipe query statement."))
 		}
@@ -110,7 +158,7 @@ func handleRecipeUpdate(recipe Recipe) (Recipe, error) {
 			return recipe, errors.Join(sqlResultErr, errors.New("Could not parse create recipe sql result and inserted id value."))
 		}
 
-		recipe.id = &createdId
+		recipe.ID = &createdId
 
 	} else {
 		stmt, stmtPrepareError := tx.Prepare("update recipes set ingredients=? where id=?")
@@ -118,7 +166,7 @@ func handleRecipeUpdate(recipe Recipe) (Recipe, error) {
 			return recipe, errors.Join(stmtPrepareError, errors.New("Could not prepare statement for recipe update."))
 		}
 
-		_, stmtExecErr := stmt.Exec(strings.Join(recipe.ingredients, "|"), recipe.id)
+		_, stmtExecErr := stmt.Exec(strings.Join(recipe.Ingredients, "|"), recipe.ID)
 		if stmtExecErr != nil {
 			return recipe, errors.Join(stmtExecErr, errors.New("Could not execute the recipe update query statement."))
 		}
@@ -133,6 +181,14 @@ func handleRecipeUpdate(recipe Recipe) (Recipe, error) {
 }
 
 func handleRootRequest(rw http.ResponseWriter, req *http.Request) {
+	allrecipes, getAllRecipesError := getAllRecipes()
+	if getAllRecipesError != nil {
+		panic(getAllRecipesError)
+	}
+
+	log.Info("Rendering Root Path", "Recipe Count", len(allrecipes))
+
+	tmplData := RootView{Recipes: allrecipes}
 	tmpl := template.Must(template.ParseFiles("index.html"))
-	tmpl.Execute(rw, nil)
+	tmpl.Execute(rw, tmplData)
 }
