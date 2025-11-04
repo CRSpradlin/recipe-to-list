@@ -163,11 +163,23 @@
   }
 }
 @layer utilities {
+  .block {
+    display: block;
+  }
   .flex {
     display: flex;
   }
+  .hidden {
+    display: none;
+  }
+  .table {
+    display: table;
+  }
   .flex-col {
     flex-direction: column;
+  }
+  .flex-row {
+    flex-direction: row;
   }
   .p-2 {
     padding: calc(var(--spacing) * 2);

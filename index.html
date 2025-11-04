@@ -2,6 +2,8 @@
 
 <head>
   <link href="/static/styles.css" rel="stylesheet" />
+  <script src="https://unpkg.com/hyperscript.org@0.9.14"></script>
+  <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js"></script>
 </head>
 
 <body>
@@ -12,6 +14,33 @@
         <div>{{ .Name }}</div>
       {{ end }}
     {{ end }}
+  </div>
+
+  <div>
+    <form class="flex flex-col">
+      <label>Recipe Name</label>
+      <input name="name" type="text" />
+      <label>Recipe Ingredients</label>
+      <div>
+        <span class="flex flex-row">
+          <input id="add-ingredient-input" type="text" placeholder="ingredient..."/>
+          <button
+            type="button"
+            _="on click 
+              get #new-recipe-ingredient-list-value.value
+              if it is ''
+                append `${#add-ingredient-input.value}`
+              else 
+                append `|${#add-ingredient-input.value}`
+              end
+              put it into #new-recipe-ingredient-list-value.value"
+          >Add Ingredient</button>
+        </span>
+      </div>
+      <div id="new-recipe-ingredient-list">
+      </div>
+      <input name="ingredients" id="new-recipe-ingredient-list-value" class="hidden" type="text" />
+    </form>  
   </div>
 </body>
 
