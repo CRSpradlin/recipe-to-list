@@ -6,8 +6,8 @@
   <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js"></script>
 </head>
 
-<body>
-  <div class="text-xl p-2 text-indigo-500">Brittany's Recipes</div>
+<body class="bg-amber-400 text-amber-950 ">
+  <div class="text-4xl p-2">Brittany's Recipes</div>
   <div class="flex flex-col">
     {{ block "recipe-list" . }}
       {{ range .Recipes }}
@@ -17,6 +17,7 @@
   </div>
 
   <div>
+    <label>Add A New Recipe</label>
     <form class="flex flex-col">
       <label>Recipe Name</label>
       <input name="name" type="text" />
@@ -40,6 +41,8 @@
       <div id="new-recipe-ingredient-list">
       </div>
       <input name="ingredients" id="new-recipe-ingredient-list-value" class="hidden" type="text" />
+      
+      <button class="bg-amber-950 text-amber-100 p-3 rounded-xl m-auto ml-0" type="submit">Submit</button>
     </form>  
   </div>
 </body>
