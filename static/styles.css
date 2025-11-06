@@ -9,12 +9,7 @@
     --color-amber-100: oklch(96.2% 0.059 95.617);
     --color-amber-400: oklch(82.8% 0.189 84.429);
     --color-amber-950: oklch(27.9% 0.077 45.635);
-    --color-indigo-500: oklch(58.5% 0.233 277.117);
     --spacing: 0.25rem;
-    --text-xl: 1.25rem;
-    --text-xl--line-height: calc(1.75 / 1.25);
-    --text-2xl: 1.5rem;
-    --text-2xl--line-height: calc(2 / 1.5);
     --text-4xl: 2.25rem;
     --text-4xl--line-height: calc(2.5 / 2.25);
     --radius-xl: 0.75rem;
@@ -171,11 +166,20 @@
   }
 }
 @layer utilities {
-  .m-auto {
-    margin: auto;
+  .mt-20 {
+    margin-top: calc(var(--spacing) * 20);
   }
-  .ml-0 {
-    margin-left: calc(var(--spacing) * 0);
+  .mr-2 {
+    margin-right: calc(var(--spacing) * 2);
+  }
+  .mr-auto {
+    margin-right: auto;
+  }
+  .ml-2 {
+    margin-left: calc(var(--spacing) * 2);
+  }
+  .ml-auto {
+    margin-left: auto;
   }
   .block {
     display: block;
@@ -209,10 +213,6 @@
   }
   .p-3 {
     padding: calc(var(--spacing) * 3);
-  }
-  .text-2xl {
-    font-size: var(--text-2xl);
-    line-height: var(--tw-leading, var(--text-2xl--line-height));
   }
   .text-4xl {
     font-size: var(--text-4xl);

@@ -16,7 +16,7 @@
     {{ end }}
   </div>
 
-  <div>
+  <div class="mt-20">
     <label>Add A New Recipe</label>
     <form class="flex flex-col">
       <label>Recipe Name</label>
@@ -26,15 +26,19 @@
         <span class="flex flex-row">
           <input id="add-ingredient-input" type="text" placeholder="ingredient..."/>
           <button
+            class="ml-2 bg-amber-950 text-amber-100 p-3 rounded-xl mr-auto"
             type="button"
-            _="on click 
+            _="on click
+              if #add-ingredient-input.value is '' break end
               get #new-recipe-ingredient-list-value.value
               if it is ''
                 append `${#add-ingredient-input.value}`
               else 
                 append `|${#add-ingredient-input.value}`
               end
-              put it into #new-recipe-ingredient-list-value.value"
+              put it into #new-recipe-ingredient-list-value.value
+              append `<div>${#add-ingredient-input.value}</div>` to #new-recipe-ingredient-list
+              set #add-ingredient-input.value to ''"
           >Add Ingredient</button>
         </span>
       </div>
@@ -42,7 +46,7 @@
       </div>
       <input name="ingredients" id="new-recipe-ingredient-list-value" class="hidden" type="text" />
       
-      <button class="bg-amber-950 text-amber-100 p-3 rounded-xl m-auto ml-0" type="submit">Submit</button>
+      <button class="bg-amber-950 text-amber-100 p-3 rounded-xl mr-auto" type="submit">Submit</button>
     </form>  
   </div>
 </body>
