@@ -19,12 +19,16 @@
   <div class="mt-20">
     <label>Add A New Recipe</label>
     <form class="flex flex-col">
-      <label>Recipe Name</label>
-      <input name="name" type="text" />
+      <div class="flex flex-col">
+        <label>Recipe Name</label>
+        <input class="mr-auto p-3 border-2 border-amber-950 rounded-xl" name="name" type="text" placeholder="Chris' Favorite Meal" />  
+      </div>
+      
       <label>Recipe Ingredients</label>
+      <div id="new-recipe-ingredient-list"></div>
       <div>
         <span class="flex flex-row">
-          <input id="add-ingredient-input" type="text" placeholder="ingredient..."/>
+          <input id="add-ingredient-input" class="p-3 border-2 border-amber-950 rounded-xl" type="text" placeholder="Rice"/>
           <button
             class="ml-2 bg-amber-950 text-amber-100 p-3 rounded-xl mr-auto"
             type="button"
@@ -39,10 +43,8 @@
               put it into #new-recipe-ingredient-list-value.value
               append `<div>${#add-ingredient-input.value}</div>` to #new-recipe-ingredient-list
               set #add-ingredient-input.value to ''"
-          >Add Ingredient</button>
+          >^</button>
         </span>
-      </div>
-      <div id="new-recipe-ingredient-list">
       </div>
       <input name="ingredients" id="new-recipe-ingredient-list-value" class="hidden" type="text" />
       
