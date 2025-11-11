@@ -8,17 +8,19 @@
 
 <body class="bg-amber-400 text-amber-950 ">
   <div class="text-4xl p-2">Brittany's Recipes</div>
-  <div class="flex flex-col">
+  <div id="recipe-list" class="flex flex-col">
     {{ block "recipe-list" . }}
       {{ range .Recipes }}
-        <div>{{ .Name }}</div>
+        {{ block "recipe" . }}
+          <div>{{ .Name }}</div>
+        {{ end }}
       {{ end }}
     {{ end }}
   </div>
 
   <div class="mt-20">
     <label>Add A New Recipe</label>
-    <form class="flex flex-col">
+    <form class="flex flex-col" hx-post="/recipe" hx-target="#recipe-list" hx-swap="beforeend" hx-on::after-request="if(event.detail.successful) this.reset()">
       <div class="flex flex-col">
         <label>Recipe Name</label>
         <input class="mr-auto p-3 border-2 border-amber-950 rounded-xl" name="name" type="text" placeholder="Chris' Favorite Meal" />  

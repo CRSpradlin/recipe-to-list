@@ -51,17 +51,18 @@ func main() {
 	db.QueryRow("select count(*) from recipes").Scan(&recipeCount)
 	log.Info("Database Initialized", "Recipe Count", recipeCount)
 
-	var newRecipe = Recipe{nil, "test recipe", []string{"apple", "pie"}}
-	newRecipe, recipeCreateErr := updateRecipe(newRecipe)
-	if recipeCreateErr != nil {
-		panic(recipeCreateErr)
-	}
+	// var newRecipe = Recipe{nil, "test recipe", []string{"apple", "pie"}}
+	// newRecipe, recipeCreateErr := updateRecipe(newRecipe)
+	// if recipeCreateErr != nil {
+	// 	panic(recipeCreateErr)
+	// }
 
-	log.Info("New Recipe Added", "ID", *(newRecipe.ID), "Name", newRecipe.Name, "Ingredients", newRecipe.Ingredients)
+	// log.Info("New Recipe Added", "ID", *(newRecipe.ID), "Name", newRecipe.Name, "Ingredients", newRecipe.Ingredients)
 
 	log.Info("Listening from web server...")
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
-	http.HandleFunc("/", handleRootRequest)
+	http.HandleFunc("/", handleRootGetRequest)
+	http.HandleFunc("/recipe", handleRecipePostRequest)
 
 	webServerError := http.ListenAndServe("0.0.0.0:3000", nil)
 
@@ -180,7 +181,7 @@ func updateRecipe(recipe Recipe) (Recipe, error) {
 	return recipe, nil
 }
 
-func handleRootRequest(rw http.ResponseWriter, req *http.Request) {
+func handleRootGetRequest(rw http.ResponseWriter, req *http.Request) {
 	allrecipes, getAllRecipesError := getAllRecipes()
 	if getAllRecipesError != nil {
 		panic(getAllRecipesError)
@@ -191,4 +192,23 @@ func handleRootRequest(rw http.ResponseWriter, req *http.Request) {
 	tmplData := RootView{Recipes: allrecipes}
 	tmpl := template.Must(template.ParseFiles("index.html"))
 	tmpl.Execute(rw, tmplData)
+}
+
+func handleRecipePostRequest(rw http.ResponseWriter, req *http.Request) {
+	newRecipeNameStr := req.PostFormValue("name")
+	newRecipeIngredientsStr := req.PostFormValue("ingredients")
+
+	newRecipe := Recipe{
+		Name: newRecipeNameStr,
+		Ingredients: strings.Split(newRecipeIngredientsStr, RECIPE_INGREDIENTS_DEL),
+	}
+
+	recipe, createRecipeErr := updateRecipe(newRecipe)
+	
+	if createRecipeErr != nil {
+		panic(createRecipeErr)
+	}
+
+	tmpl := template.Must(template.ParseFiles("index.html"))
+	tmpl.ExecuteTemplate(rw, "recipe", recipe)
 }
