@@ -7,19 +7,9 @@
 </head>
 
 <body class="bg-amber-400 text-amber-950 ">
-  <div class="text-4xl p-2">Brittany's Recipes</div>
-  <div id="recipe-list" class="flex flex-col">
-    {{ block "recipe-list" . }}
-      {{ range .Recipes }}
-        {{ block "recipe" . }}
-          <div>{{ .Name }}</div>
-        {{ end }}
-      {{ end }}
-    {{ end }}
-  </div>
-
-  <div class="mt-20">
-    <label>Add A New Recipe</label>
+  
+  <div class="">
+    <label class="mt-2 text-4xl p-2">Create a New Recipe</label>
     <form class="flex flex-col" hx-post="/recipe" hx-target="#recipe-list" hx-swap="beforeend"
         _= "on htmx:afterRequest 
             if event.detail.successful then 
@@ -31,16 +21,16 @@
     >
       <div class="flex flex-col">
         <label>Recipe Name</label>
-        <input class="mr-auto p-3 border-2 border-amber-950 rounded-xl" name="name" type="text" placeholder="Chris' Favorite Meal" />  
+        <input required class="mr-auto p-3 border-2 border-amber-950 rounded-xl" name="name" type="text" placeholder="Chris' Favorite Meal" />  
       </div>
       
       <label>Recipe Ingredients</label>
       <div id="new-recipe-ingredient-list"></div>
       <div>
         <span class="flex flex-row">
-          <input id="add-ingredient-input" class="p-3 border-2 border-amber-950 rounded-xl" type="text" placeholder="Rice"/>
+          <input required id="add-ingredient-input" class="p-3 border-2 border-amber-950 rounded-xl" type="text" placeholder="Rice"/>
           <button
-            class="ml-2 bg-amber-950 text-amber-100 p-3 rounded-xl mr-auto"
+            class="ml-2 bg-amber-950 hover:bg-amber-700 active:bg-amber-800 text-amber-100 p-3 rounded-xl mr-auto h-auto"
             type="button"
             _="on click
               if #add-ingredient-input.value is '' break end
@@ -58,9 +48,94 @@
       </div>
       <input name="ingredients" id="new-recipe-ingredient-list-value" class="hidden" type="text" />
 
-      <button class="bg-amber-950 text-amber-100 p-3 rounded-xl mr-auto" type="submit">Submit</button>
+      <button class="bg-amber-950 hover:bg-amber-700 active:bg-amber-800 text-amber-100 p-3 rounded-xl mr-auto" type="submit">Submit</button>
     </form>
   </div>
-</body>
+
+
+
+  <label class="mt-2 text-4xl p-2">Brittany's Recipes</label>
+  <div id="recipe-list" class="flex flex-col">
+    {{ block "recipe-list" . }}
+      {{ range .Recipes }}
+        {{ block "recipe" . }}
+          <div class="flex flex-row">
+            <label>{{ .Name }}</label>
+            <button 
+              class="bg-amber-950 active:bg-amber-800 hover:bg-amber-700 text-amber-100 p-3 rounded-xl mr-auto" 
+              type="button"
+              _="on click
+                get #selected-recipes-input.value
+                if it is ''
+                  append `{{ .Name }}`
+                else
+                  append `|{{ .Name }}`
+                end
+                put it into #selected-recipes-input.value
+                log #selected-recipes-input.value
+                put '✓' into me
+                add @disabled to me"
+            >+</button>
+          </div>
+        {{ end }}
+      {{ end }}
+    {{ end }}
+  </div>
+  
+  <form id="selected-recipes-form" >
+    <input id="selected-recipes-input" class="hidden" name="selected-recipes" type="text" />
+    <button 
+      class="bg-amber-950 active:bg-amber-800 hover:bg-amber-700 text-amber-100 p-3 rounded-xl" 
+      type="button"
+      _="on click
+        if #selected-recipes-input.value is '' 
+          halt
+        end
+        set recipes to #selected-recipes-input.value.split('|')
+        put '' into #modal-recipe-list
+        repeat for recipe in recipes
+          append `
+            <div class='flex flex-row items-center gap-2 mb-2'>
+              <label class='flex-1'>${recipe}</label>
+              <select class='p-2 border-2 border-amber-950 rounded-xl bg-amber-100' name='day-${recipe}'>
+                <option value=''>Select Day</option>
+                <option value='Monday'>Monday</option>
+                <option value='Tuesday'>Tuesday</option>
+                <option value='Wednesday'>Wednesday</option>
+                <option value='Thursday'>Thursday</option>
+                <option value='Friday'>Friday</option>
+                <option value='Saturday'>Saturday</option>
+                <option value='Sunday'>Sunday</option>
+              </select>
+            </div>
+          ` to #modal-recipe-list
+        end
+        remove .hidden from #recipe-modal"
+    >Create Grocery List</button>
+  </form>
+  
+  <!-- Modal -->
+  <div id="recipe-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-amber-400 p-6 rounded-xl max-w-2xl w-full mx-4 border-4 border-amber-950">
+      <h2 class="text-3xl mb-4">Schedule Your Recipes</h2>
+      <div id="modal-recipe-list" class="mb-4"></div>
+      <div class="flex gap-2">
+        <button 
+          class="bg-amber-950 hover:bg-amber-700 active:bg-amber-800 text-amber-100 p-3 rounded-xl"
+          type="button"
+          _="on click add .hidden to #recipe-modal"
+        >Cancel</button>
+        <button 
+          class="bg-amber-950 hover:bg-amber-700 active:bg-amber-800 text-amber-100 p-3 rounded-xl"
+          type="button"
+          _="on click
+            log 'Create grocery list clicked'
+            add .hidden to #recipe-modal"
+        >Create List</button>
+      </div>
+    </div>
+  </div>
+  
+  </body>
 
 </html>

@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"net/http"
 	"os"
+	"time"
 
 	// "fmt"
 	"errors"
@@ -26,6 +27,7 @@ const SQLITE_DB_SCHEMA = `
 		id integer not null primary key,
 		name text not null,
 		retrieved boolean not null,
+		recipe text not null,
 		dtm date not null
 	);
 `
@@ -40,6 +42,7 @@ type Recipe struct {
 
 type RootView struct {
 	Recipes []Recipe
+	Version int64
 }
 
 var db *sql.DB
@@ -73,7 +76,7 @@ func main() {
 	webServerError := http.ListenAndServe("0.0.0.0:3000", nil)
 
 	if webServerError != nil {
-		panic(errors.Join(webServerError, errors.New("Error listening and serving web server")))
+		panic(errors.Join(webServerError, errors.New("error listening and serving web server")))
 	}
 
 }
@@ -84,13 +87,13 @@ func initSqliteDB() (*sql.DB, error) {
 	if errors.Is(err, os.ErrNotExist) {
 		dirErr := os.MkdirAll(SQLITE_FILE_LOC, os.ModePerm)
 		if dirErr != nil {
-			return nil, errors.Join(dirErr, errors.New("Could not create directory for database file."))
+			return nil, errors.Join(dirErr, errors.New("could not create directory for database file"))
 		}
 
 		file, createFileErr := os.Create(SQLITE_FILE_LOC + SQLITE_FILE_NAME)
 
 		if createFileErr != nil {
-			return nil, errors.Join(createFileErr, errors.New("Could not create the necessary database file, please check for proper permissions."))
+			return nil, errors.Join(createFileErr, errors.New("could not create the necessary database file, please check for proper permissions"))
 		}
 
 		file.Close()
@@ -98,13 +101,13 @@ func initSqliteDB() (*sql.DB, error) {
 
 	initDB, initDBErr := sql.Open("sqlite3", SQLITE_FILE_LOC+SQLITE_FILE_NAME)
 	if initDBErr != nil {
-		return nil, errors.Join(initDBErr, errors.New("Could not open a connection to the database file."))
+		return nil, errors.Join(initDBErr, errors.New("could not open a connection to the database file"))
 	}
 
 	_, dbSchemaInitErr := initDB.Exec(SQLITE_DB_SCHEMA)
 
 	if dbSchemaInitErr != nil {
-		return nil, errors.Join(dbSchemaInitErr, errors.New("Could not run the DB Schema initialization SQL script. Please ensure it is properly formatted."))
+		return nil, errors.Join(dbSchemaInitErr, errors.New("could not run the DB Schema initialization SQL script. Please ensure it is properly formatted"))
 	}
 
 	return initDB, nil
@@ -115,7 +118,7 @@ func getAllRecipes() ([]Recipe, error) {
 
 	rows, queryRowsError := db.Query("select id, name, ingredients from recipes")
 	if queryRowsError != nil {
-		return nil, errors.Join(queryRowsError, errors.New("Failed to query all recipes."))
+		return nil, errors.Join(queryRowsError, errors.New("failed to query all recipes"))
 	}
 
 	for rows.Next() {
@@ -125,7 +128,7 @@ func getAllRecipes() ([]Recipe, error) {
 
 		scanErr := rows.Scan(&id, &name, &ingredientsStr)
 		if scanErr != nil {
-			return nil, errors.Join(scanErr, errors.New("Unable to scan for next row within get all recipes db query."))
+			return nil, errors.Join(scanErr, errors.New("unable to scan for next row within get all recipes db query"))
 		}
 		ingredients := strings.Split(ingredientsStr, RECIPE_INGREDIENTS_DEL)
 
@@ -145,24 +148,24 @@ func getAllRecipes() ([]Recipe, error) {
 func updateRecipe(recipe Recipe) (Recipe, error) {
 	tx, dbBeginErr := db.Begin()
 	if dbBeginErr != nil {
-		return recipe, errors.Join(dbBeginErr, errors.New("Could not start database tx for recipe create/update."))
+		return recipe, errors.Join(dbBeginErr, errors.New("could not start database tx for recipe create/update"))
 	}
 
 	if recipe.ID == nil {
 		stmt, stmtPrepareError := tx.Prepare("insert into recipes(name,ingredients) values(?,?)")
 		if stmtPrepareError != nil {
-			return recipe, errors.Join(stmtPrepareError, errors.New("Could not prepare statement for recipe create."))
+			return recipe, errors.Join(stmtPrepareError, errors.New("could not prepare statement for recipe create"))
 		}
 		defer stmt.Close()
 
 		result, stmtExecErr := stmt.Exec(recipe.Name, strings.Join(recipe.Ingredients, "|"))
 		if stmtExecErr != nil {
-			return recipe, errors.Join(stmtExecErr, errors.New("Could not execute the create recipe query statement."))
+			return recipe, errors.Join(stmtExecErr, errors.New("could not execute the create recipe query statement"))
 		}
 
 		createdId, sqlResultErr := result.LastInsertId()
 		if sqlResultErr != nil {
-			return recipe, errors.Join(sqlResultErr, errors.New("Could not parse create recipe sql result and inserted id value."))
+			return recipe, errors.Join(sqlResultErr, errors.New("could not parse create recipe sql result and inserted id value"))
 		}
 
 		recipe.ID = &createdId
@@ -170,18 +173,18 @@ func updateRecipe(recipe Recipe) (Recipe, error) {
 	} else {
 		stmt, stmtPrepareError := tx.Prepare("update recipes set ingredients=? where id=?")
 		if stmtPrepareError != nil {
-			return recipe, errors.Join(stmtPrepareError, errors.New("Could not prepare statement for recipe update."))
+			return recipe, errors.Join(stmtPrepareError, errors.New("could not prepare statement for recipe update"))
 		}
 
 		_, stmtExecErr := stmt.Exec(strings.Join(recipe.Ingredients, "|"), recipe.ID)
 		if stmtExecErr != nil {
-			return recipe, errors.Join(stmtExecErr, errors.New("Could not execute the recipe update query statement."))
+			return recipe, errors.Join(stmtExecErr, errors.New("could not execute the recipe update query statement"))
 		}
 	}
 
 	txCommitErr := tx.Commit()
 	if txCommitErr != nil {
-		return recipe, errors.Join(txCommitErr, errors.New("Could not commit the recipe update/create statement."))
+		return recipe, errors.Join(txCommitErr, errors.New("could not commit the recipe update/create statement"))
 	}
 
 	return recipe, nil
@@ -195,7 +198,12 @@ func handleRootGetRequest(rw http.ResponseWriter, req *http.Request) {
 
 	log.Info("Rendering Root Path", "Recipe Count", len(allrecipes))
 
-	tmplData := RootView{Recipes: allrecipes}
+	// Prevent caching of the HTML page
+	rw.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	rw.Header().Set("Pragma", "no-cache")
+	rw.Header().Set("Expires", "0")
+
+	tmplData := RootView{Recipes: allrecipes, Version: time.Now().Unix()}
 	tmpl := template.Must(template.ParseFiles("index.html"))
 	tmpl.Execute(rw, tmplData)
 }
@@ -205,12 +213,12 @@ func handleRecipePostRequest(rw http.ResponseWriter, req *http.Request) {
 	newRecipeIngredientsStr := req.PostFormValue("ingredients")
 
 	newRecipe := Recipe{
-		Name: newRecipeNameStr,
+		Name:        newRecipeNameStr,
 		Ingredients: strings.Split(newRecipeIngredientsStr, RECIPE_INGREDIENTS_DEL),
 	}
 
 	recipe, createRecipeErr := updateRecipe(newRecipe)
-	
+
 	if createRecipeErr != nil {
 		panic(createRecipeErr)
 	}
