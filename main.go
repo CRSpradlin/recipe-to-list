@@ -22,6 +22,12 @@ const SQLITE_DB_SCHEMA = `
 		name text not null,
 		ingredients text not null
 	);
+	create table if not exists groceries (
+		id integer not null primary key,
+		name text not null,
+		retrieved boolean not null,
+		dtm date not null
+	);
 `
 
 const RECIPE_INGREDIENTS_DEL = "|"

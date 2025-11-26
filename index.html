@@ -20,7 +20,15 @@
 
   <div class="mt-20">
     <label>Add A New Recipe</label>
-    <form class="flex flex-col" hx-post="/recipe" hx-target="#recipe-list" hx-swap="beforeend" hx-on::after-request="if(event.detail.successful) this.reset()">
+    <form class="flex flex-col" hx-post="/recipe" hx-target="#recipe-list" hx-swap="beforeend"
+        _= "on htmx:afterRequest 
+            if event.detail.successful then 
+              reset() me then
+              put '' into #new-recipe-ingredient-list
+            end
+            log 'That went well!'
+        "
+    >
       <div class="flex flex-col">
         <label>Recipe Name</label>
         <input class="mr-auto p-3 border-2 border-amber-950 rounded-xl" name="name" type="text" placeholder="Chris' Favorite Meal" />  
@@ -49,9 +57,9 @@
         </span>
       </div>
       <input name="ingredients" id="new-recipe-ingredient-list-value" class="hidden" type="text" />
-      
+
       <button class="bg-amber-950 text-amber-100 p-3 rounded-xl mr-auto" type="submit">Submit</button>
-    </form>  
+    </form>
   </div>
 </body>
 
