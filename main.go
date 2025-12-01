@@ -42,6 +42,15 @@ type Recipe struct {
 	Ingredients []string
 }
 
+type GroceryItem struct {
+	ID        *int64
+	Name      string
+	Retrieved bool
+	Recipe    string
+	Weekday   string
+	Dtm       time.Time
+}
+
 type RootView struct {
 	Recipes []Recipe
 	Version int64
@@ -154,6 +163,43 @@ func getAllRecipes() ([]Recipe, error) {
 	return recipes, nil
 }
 
+func getAllGroceryItems() ([]GroceryItem, error) {
+	items := []GroceryItem{}
+
+	rows, queryRowsError := db.Query("select id, name, retrieved, recipe, weekday, dtm from groceries")
+	if queryRowsError != nil {
+		return nil, errors.Join(queryRowsError, errors.New("failed to query all grocery items"))
+	}
+
+	for rows.Next() {
+		var id int64
+		var name string
+		var retrieved bool
+		var recipe string
+		var weekday string
+		var dtm time.Time
+
+		scanErr := rows.Scan(&id, &name, &retrieved, &recipe, &weekday, &dtm)
+		if scanErr != nil {
+			return nil, errors.Join(scanErr, errors.New("unable to scan for next row within get all grocery items db query"))
+		}
+
+		newItem := GroceryItem{
+			ID:        &id,
+			Name:      name,
+			Retrieved: retrieved,
+			Recipe:    recipe,
+			Weekday:   weekday,
+			Dtm:       dtm,
+		}
+		log.Info("Grocery Item Found", "ID", newItem.ID, "Name", newItem.Name, "Retrieved", newItem.Retrieved, "Recipe", newItem.Recipe, "Weekday", newItem.Weekday)
+		items = append(items, newItem)
+	}
+
+	rows.Close()
+	return items, nil
+}
+
 func updateRecipe(recipe Recipe) (Recipe, error) {
 	tx, dbBeginErr := db.Begin()
 	if dbBeginErr != nil {
@@ -197,6 +243,51 @@ func updateRecipe(recipe Recipe) (Recipe, error) {
 	}
 
 	return recipe, nil
+}
+
+func updateGroceryItem(item GroceryItem) (GroceryItem, error) {
+	tx, dbBeginErr := db.Begin()
+	if dbBeginErr != nil {
+		return item, errors.Join(dbBeginErr, errors.New("could not start database tx for grocery item create/update"))
+	}
+
+	if item.ID == nil {
+		stmt, stmtPrepareError := tx.Prepare("insert into groceries(name,retrieved,recipe,weekday,dtm) values(?,?,?,?,?)")
+		if stmtPrepareError != nil {
+			return item, errors.Join(stmtPrepareError, errors.New("could not prepare statement for grocery item create"))
+		}
+		defer stmt.Close()
+
+		result, stmtExecErr := stmt.Exec(item.Name, item.Retrieved, item.Recipe, item.Weekday, item.Dtm)
+		if stmtExecErr != nil {
+			return item, errors.Join(stmtExecErr, errors.New("could not execute the create grocery item query statement"))
+		}
+
+		createdId, sqlResultErr := result.LastInsertId()
+		if sqlResultErr != nil {
+			return item, errors.Join(sqlResultErr, errors.New("could not parse create grocery item sql result and inserted id value"))
+		}
+
+		item.ID = &createdId
+
+	} else {
+		stmt, stmtPrepareError := tx.Prepare("update groceries set name=?, retrieved=?, recipe=?, weekday=?, dtm=? where id=?")
+		if stmtPrepareError != nil {
+			return item, errors.Join(stmtPrepareError, errors.New("could not prepare statement for grocery item update"))
+		}
+
+		_, stmtExecErr := stmt.Exec(item.Name, item.Retrieved, item.Recipe, item.Weekday, item.Dtm, item.ID)
+		if stmtExecErr != nil {
+			return item, errors.Join(stmtExecErr, errors.New("could not execute the grocery item update query statement"))
+		}
+	}
+
+	txCommitErr := tx.Commit()
+	if txCommitErr != nil {
+		return item, errors.Join(txCommitErr, errors.New("could not commit the grocery item update/create statement"))
+	}
+
+	return item, nil
 }
 
 func handleRootGetRequest(rw http.ResponseWriter, req *http.Request) {
@@ -258,12 +349,39 @@ func handleGroceryListPostRequest(rw http.ResponseWriter, req *http.Request) {
 
 		log.Info("Processing recipe for grocery list", "RecipeID", recipeID, "Weekday", weekday)
 
-		// TODO: Insert into groceries table or process as needed
-		// For now, just logging the data
+		// Get the recipe to access its ingredients
+		var recipeName string
+		var ingredientsStr string
+		queryErr := db.QueryRow("select name, ingredients from recipes where id=?", recipeID).Scan(&recipeName, &ingredientsStr)
+		if queryErr != nil {
+			log.Error("Failed to query recipe", "RecipeID", recipeID, "Error", queryErr)
+			continue
+		}
+
+		ingredients := strings.Split(ingredientsStr, RECIPE_INGREDIENTS_DEL)
+
+		// Insert each ingredient into the groceries table
+		for _, ingredientName := range ingredients {
+			newItem := GroceryItem{
+				Name:      ingredientName,
+				Retrieved: false,
+				Recipe:    recipeName,
+				Weekday:   weekday,
+				Dtm:       time.Now(),
+			}
+
+			item, itemErr := updateGroceryItem(newItem)
+			if itemErr != nil {
+				log.Error("Failed to insert grocery item", "Name", ingredientName, "Recipe", recipeName, "Error", itemErr)
+				continue
+			}
+
+			log.Info("Grocery item added to list", "ID", item.ID, "Name", item.Name, "Recipe", item.Recipe, "Weekday", item.Weekday)
+		}
 	}
 
-    rw.Header().Set("HX-Redirect", "/grocery-list")
-    rw.WriteHeader(http.StatusOK)
+	rw.Header().Set("HX-Redirect", "/grocery-list")
+	rw.WriteHeader(http.StatusOK)
 }
 
 func handleGroceryListGetRequest(rw http.ResponseWriter, req *http.Request) {
