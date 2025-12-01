@@ -1,7 +1,7 @@
 <html>
 
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <link href="/static/styles.css?v={{ .Version }}" rel="stylesheet" />
   <script src="https://unpkg.com/hyperscript.org@0.9.14"></script>
   <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js"></script>
@@ -22,14 +22,14 @@
     >
       <div class="flex flex-col gap-1">
         <label class="text-sm sm:text-base font-semibold">Recipe Name</label>
-        <input required class="w-full p-2 sm:p-3 border-2 border-amber-950 rounded-xl text-sm sm:text-base" name="name" type="text" placeholder="Chris' Favorite Meal" />  
+        <input required class="w-full p-2 sm:p-3 border-2 border-amber-950 rounded-xl text-base" style="font-size: 16px;" name="name" type="text" placeholder="Chris' Favorite Meal" />  
       </div>
       
       <label class="text-sm sm:text-base font-semibold">Recipe Ingredients</label>
       <div required id="new-recipe-ingredient-list" class="flex flex-col gap-1"></div>
       <div>
         <span class="flex flex-row gap-2">
-          <input id="add-ingredient-input" class="flex-1 p-2 sm:p-3 border-2 border-amber-950 rounded-xl text-sm sm:text-base" type="text" placeholder="Rice"
+          <input id="add-ingredient-input" class="flex-1 p-2 sm:p-3 border-2 border-amber-950 rounded-xl text-base" style="font-size: 16px;" type="text" placeholder="Rice"
             _="on keydown
               if event.key is 'Enter'
                 halt the event
