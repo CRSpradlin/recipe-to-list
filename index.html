@@ -1,16 +1,17 @@
 <html>
 
 <head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link href="/static/styles.css?v={{ .Version }}" rel="stylesheet" />
   <script src="https://unpkg.com/hyperscript.org@0.9.14"></script>
   <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js"></script>
 </head>
 
-<body class="bg-amber-400 text-amber-950 ">
+<body class="bg-amber-400 text-amber-950 p-2 sm:p-4 md:p-6">
   
-  <div class="">
-    <label class="mt-2 text-4xl p-2">Create a New Recipe</label>
-    <form class="flex flex-col" hx-post="/recipe" hx-target="#recipe-list" hx-swap="beforeend"
+  <div class="mb-6 sm:mb-8">
+    <label class="block text-2xl sm:text-3xl md:text-4xl font-bold mb-4">Create a New Recipe</label>
+    <form class="flex flex-col gap-3 sm:gap-4" hx-post="/recipe" hx-target="#recipe-list" hx-swap="beforeend"
         _= "on htmx:afterRequest 
             if event.detail.successful then 
               reset() me then
@@ -19,18 +20,25 @@
             log 'That went well!'
         "
     >
-      <div class="flex flex-col">
-        <label>Recipe Name</label>
-        <input required class="mr-auto p-3 border-2 border-amber-950 rounded-xl" name="name" type="text" placeholder="Chris' Favorite Meal" />  
+      <div class="flex flex-col gap-1">
+        <label class="text-sm sm:text-base font-semibold">Recipe Name</label>
+        <input required class="w-full p-2 sm:p-3 border-2 border-amber-950 rounded-xl text-sm sm:text-base" name="name" type="text" placeholder="Chris' Favorite Meal" />  
       </div>
       
-      <label>Recipe Ingredients</label>
-      <div id="new-recipe-ingredient-list"></div>
+      <label class="text-sm sm:text-base font-semibold">Recipe Ingredients</label>
+      <div required id="new-recipe-ingredient-list" class="flex flex-col gap-1"></div>
       <div>
-        <span class="flex flex-row">
-          <input required id="add-ingredient-input" class="p-3 border-2 border-amber-950 rounded-xl" type="text" placeholder="Rice"/>
+        <span class="flex flex-row gap-2">
+          <input id="add-ingredient-input" class="flex-1 p-2 sm:p-3 border-2 border-amber-950 rounded-xl text-sm sm:text-base" type="text" placeholder="Rice"
+            _="on keydown
+              if event.key is 'Enter'
+                halt the event
+                send click to the next <button/>
+              end"
+          />
           <button
-            class="ml-2 bg-amber-950 hover:bg-amber-700 active:bg-amber-800 text-amber-100 p-3 rounded-xl mr-auto h-auto"
+            id="add-ingredient-button"
+            class="bg-amber-950 hover:bg-amber-700 active:bg-amber-800 text-amber-100 px-4 py-2 sm:p-3 rounded-xl text-lg sm:text-xl"
             type="button"
             _="on click
               if #add-ingredient-input.value is '' break end
@@ -41,28 +49,28 @@
                 append `|${#add-ingredient-input.value}`
               end
               put it into #new-recipe-ingredient-list-value.value
-              append `<div>${#add-ingredient-input.value}</div>` to #new-recipe-ingredient-list
+              append `<div class='p-1 text-sm sm:text-base'>${#add-ingredient-input.value}</div>` to #new-recipe-ingredient-list
               set #add-ingredient-input.value to ''"
           >^</button>
         </span>
       </div>
       <input name="ingredients" id="new-recipe-ingredient-list-value" class="hidden" type="text" />
 
-      <button class="bg-amber-950 hover:bg-amber-700 active:bg-amber-800 text-amber-100 p-3 rounded-xl mr-auto" type="submit">Submit</button>
+      <button class="w-full sm:w-auto bg-amber-950 hover:bg-amber-700 active:bg-amber-800 text-amber-100 p-3 rounded-xl text-sm sm:text-base" type="submit">Submit</button>
     </form>
   </div>
 
 
 
-  <label class="mt-2 text-4xl p-2">Brittany's Recipes</label>
-  <div id="recipe-list" class="flex flex-col">
+  <label class="block text-2xl sm:text-3xl md:text-4xl font-bold mb-4">Brittany's Recipes</label>
+  <div id="recipe-list" class="flex flex-col gap-2 sm:gap-3 mb-6">
     {{ block "recipe-list" . }}
       {{ range .Recipes }}
         {{ block "recipe" . }}
-          <div class="flex flex-row">
-            <label>{{ .Name }}</label>
+          <div class="flex flex-row items-center justify-between gap-2 p-2 sm:p-3 bg-amber-300 rounded-lg">
+            <label class="text-sm sm:text-base md:text-lg flex-1 break-words">{{ .Name }}</label>
             <button 
-              class="bg-amber-950 active:bg-amber-800 hover:bg-amber-700 text-amber-100 p-3 rounded-xl mr-auto" 
+              class="bg-amber-950 active:bg-amber-800 hover:bg-amber-700 text-amber-100 px-4 py-2 sm:p-3 rounded-xl text-sm sm:text-base whitespace-nowrap" 
               type="button"
               _="on click
                 get #selected-recipes-input.value
@@ -82,10 +90,10 @@
     {{ end }}
   </div>
   
-  <form id="selected-recipes-form" >
+  <form id="selected-recipes-form" class="mb-6">
     <input id="selected-recipes-input" class="hidden" name="selected-recipes" type="text" />
     <button 
-      class="bg-amber-950 active:bg-amber-800 hover:bg-amber-700 text-amber-100 p-3 rounded-xl" 
+      class="w-full sm:w-auto bg-amber-950 active:bg-amber-800 hover:bg-amber-700 text-amber-100 p-3 sm:p-4 rounded-xl text-sm sm:text-base font-semibold" 
       type="button"
       _="on click
         if #selected-recipes-input.value is '' 
@@ -95,9 +103,9 @@
         put '' into #modal-recipe-list
         repeat for recipe in recipes
           append `
-            <div class='flex flex-row items-center gap-2 mb-2'>
-              <label class='flex-1'>${recipe}</label>
-              <select class='p-2 border-2 border-amber-950 rounded-xl bg-amber-100' name='day-${recipe}'>
+            <div class='flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-3 p-2 bg-amber-300 rounded-lg'>
+              <label class='flex-1 break-words text-sm sm:text-base'>${recipe}</label>
+              <select class='w-full sm:w-auto p-2 border-2 border-amber-950 rounded-xl bg-amber-100 text-sm sm:text-base' name='day-\${recipe}'>
                 <option value=''>Select Day</option>
                 <option value='Monday'>Monday</option>
                 <option value='Tuesday'>Tuesday</option>
@@ -115,18 +123,18 @@
   </form>
   
   <!-- Modal -->
-  <div id="recipe-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div class="bg-amber-400 p-6 rounded-xl max-w-2xl w-full mx-4 border-4 border-amber-950">
-      <h2 class="text-3xl mb-4">Schedule Your Recipes</h2>
+  <div id="recipe-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div class="bg-amber-400 p-4 sm:p-6 rounded-xl max-w-2xl w-full border-4 border-amber-950 max-h-[90vh] overflow-y-auto">
+      <h2 class="text-2xl sm:text-3xl font-bold mb-4">Schedule Your Recipes</h2>
       <div id="modal-recipe-list" class="mb-4"></div>
-      <div class="flex gap-2">
+      <div class="flex flex-col sm:flex-row gap-2 sm:gap-3">
         <button 
-          class="bg-amber-950 hover:bg-amber-700 active:bg-amber-800 text-amber-100 p-3 rounded-xl"
+          class="w-full sm:w-auto bg-amber-950 hover:bg-amber-700 active:bg-amber-800 text-amber-100 p-3 rounded-xl text-sm sm:text-base"
           type="button"
           _="on click add .hidden to #recipe-modal"
         >Cancel</button>
         <button 
-          class="bg-amber-950 hover:bg-amber-700 active:bg-amber-800 text-amber-100 p-3 rounded-xl"
+          class="w-full sm:w-auto bg-amber-950 hover:bg-amber-700 active:bg-amber-800 text-amber-100 p-3 rounded-xl text-sm sm:text-base"
           type="button"
           _="on click
             log 'Create grocery list clicked'
