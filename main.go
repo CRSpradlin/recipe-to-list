@@ -171,7 +171,7 @@ func getAllRecipes() ([]Recipe, error) {
 func getAllGroceryItems() ([]GroceryItem, error) {
 	items := []GroceryItem{}
 
-	rows, queryRowsError := db.Query("select id, name, retrieved, recipe, weekday, dtm from groceries")
+	rows, queryRowsError := db.Query("select id, name, retrieved, recipe, weekday, dtm from groceries order by name asc")
 	if queryRowsError != nil {
 		return nil, errors.Join(queryRowsError, errors.New("failed to query all grocery items"))
 	}
