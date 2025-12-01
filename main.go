@@ -56,6 +56,11 @@ type RootView struct {
 	Version int64
 }
 
+type GroceryListView struct {
+	GroceryItems []GroceryItem
+	Version      int64
+}
+
 var db *sql.DB
 
 func main() {
@@ -385,13 +390,19 @@ func handleGroceryListPostRequest(rw http.ResponseWriter, req *http.Request) {
 }
 
 func handleGroceryListGetRequest(rw http.ResponseWriter, req *http.Request) {
-	log.Info("Rendering Grocery List Page")
+	allGroceryItems, getAllGroceryItemsError := getAllGroceryItems()
+	if getAllGroceryItemsError != nil {
+		panic(getAllGroceryItemsError)
+	}
+
+	log.Info("Rendering Grocery List Page", "Grocery Item Count", len(allGroceryItems))
 
 	// Prevent caching of the HTML page
 	rw.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	rw.Header().Set("Pragma", "no-cache")
 	rw.Header().Set("Expires", "0")
 
+	tmplData := GroceryListView{GroceryItems: allGroceryItems, Version: time.Now().Unix()}
 	tmpl := template.Must(template.ParseFiles("grocery-list.html"))
-	tmpl.Execute(rw, nil)
+	tmpl.Execute(rw, tmplData)
 }

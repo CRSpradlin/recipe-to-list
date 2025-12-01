@@ -2,7 +2,7 @@
 
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <link href="/static/styles.css" rel="stylesheet" />
+  <link href="/static/styles.css?v={{ .Version }}" rel="stylesheet" />
   <script src="https://unpkg.com/hyperscript.org@0.9.14"></script>
   <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js"></script>
 </head>
@@ -10,7 +10,33 @@
 <body class="bg-amber-400 text-amber-950 p-2 sm:p-4 md:p-6">
   
   <div class="mb-6 sm:mb-8">
-    <h1 class="text-2xl sm:text-3xl md:text-4xl font-bold mb-4">Grocery List</h1>
+    <h1 class="block text-2xl sm:text-3xl md:text-4xl font-bold mb-4">Grocery List</h1>
+    
+    <div id="grocery-item-list" class="flex flex-col gap-2 sm:gap-3">
+      {{ block "grocery-item-list" . }}
+        {{ range .GroceryItems }}
+          {{ block "grocery-item" . }}
+            <div class="flex flex-row items-center justify-between gap-2 p-2 sm:p-3 bg-amber-300 rounded-lg">
+              <div class="flex-1">
+                <label class="text-sm sm:text-base md:text-lg break-words font-semibold">{{ .Name }}</label>
+                <div class="text-xs sm:text-sm text-amber-950">
+                  <span>{{ .Recipe }}</span>
+                  {{ if .Weekday }}
+                    <span> • {{ .Weekday }}</span>
+                  {{ end }}
+                </div>
+              </div>
+              <input 
+                type="checkbox" 
+                {{ if .Retrieved }}checked{{ end }}
+                class="w-6 h-6 rounded border-2 border-amber-950"
+                data-item-id="{{ .ID }}"
+              />
+            </div>
+          {{ end }}
+        {{ end }}
+      {{ end }}
+    </div>
   </div>
 
 </body>
