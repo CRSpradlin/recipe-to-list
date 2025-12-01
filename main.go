@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	// "fmt"
@@ -27,7 +28,8 @@ const SQLITE_DB_SCHEMA = `
 		id integer not null primary key,
 		name text not null,
 		retrieved boolean not null,
-		recipe text not null,
+		recipe text,
+		weekday text,
 		dtm date not null
 	);
 `
@@ -72,6 +74,13 @@ func main() {
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
 	http.HandleFunc("/", handleRootGetRequest)
 	http.HandleFunc("/recipe", handleRecipePostRequest)
+	http.HandleFunc("/grocery-list", func(rw http.ResponseWriter, req *http.Request) {
+		if req.Method == http.MethodPost {
+			handleGroceryListPostRequest(rw, req)
+		} else {
+			handleGroceryListGetRequest(rw, req)
+		}
+	})
 
 	webServerError := http.ListenAndServe("0.0.0.0:3000", nil)
 
@@ -225,4 +234,46 @@ func handleRecipePostRequest(rw http.ResponseWriter, req *http.Request) {
 
 	tmpl := template.Must(template.ParseFiles("index.html"))
 	tmpl.ExecuteTemplate(rw, "recipe", recipe)
+}
+
+func handleGroceryListPostRequest(rw http.ResponseWriter, req *http.Request) {
+	req.ParseForm()
+	recipeIDs := req.Form["recipe_ids[]"]
+	weekdays := req.Form["weekdays[]"]
+
+	log.Info("Creating grocery list", "RecipeCount", len(recipeIDs))
+
+	// Process each recipe ID with its corresponding weekday
+	for i, recipeIDStr := range recipeIDs {
+		recipeID, err := strconv.ParseInt(recipeIDStr, 10, 64)
+		if err != nil {
+			log.Error("Failed to parse recipe ID", "RecipeID", recipeIDStr, "Error", err)
+			continue
+		}
+
+		weekday := ""
+		if i < len(weekdays) {
+			weekday = weekdays[i]
+		}
+
+		log.Info("Processing recipe for grocery list", "RecipeID", recipeID, "Weekday", weekday)
+
+		// TODO: Insert into groceries table or process as needed
+		// For now, just logging the data
+	}
+
+    rw.Header().Set("HX-Redirect", "/grocery-list")
+    rw.WriteHeader(http.StatusOK)
+}
+
+func handleGroceryListGetRequest(rw http.ResponseWriter, req *http.Request) {
+	log.Info("Rendering Grocery List Page")
+
+	// Prevent caching of the HTML page
+	rw.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	rw.Header().Set("Pragma", "no-cache")
+	rw.Header().Set("Expires", "0")
+
+	tmpl := template.Must(template.ParseFiles("grocery-list.html"))
+	tmpl.Execute(rw, nil)
 }

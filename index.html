@@ -72,12 +72,14 @@
             <button 
               class="bg-amber-950 active:bg-amber-800 hover:bg-amber-700 text-amber-100 px-4 py-2 sm:p-3 rounded-xl text-sm sm:text-base whitespace-nowrap" 
               type="button"
+              data-recipe-id="{{ .ID }}"
+              data-recipe-name="{{ .Name }}"
               _="on click
                 get #selected-recipes-input.value
                 if it is ''
-                  append `{{ .Name }}`
+                  append `{{ .ID }}`
                 else
-                  append `|{{ .Name }}`
+                  append `|{{ .ID }}`
                 end
                 put it into #selected-recipes-input.value
                 log #selected-recipes-input.value
@@ -90,8 +92,9 @@
     {{ end }}
   </div>
   
-  <form id="selected-recipes-form" class="mb-6">
+  <form id="selected-recipes-form" class="mb-6" hx-post="/grocery-list" hx-swap="none">
     <input id="selected-recipes-input" class="hidden" name="selected-recipes" type="text" />
+    <div id="form-inputs-container" class="hidden"></div>
     <button 
       class="w-full sm:w-auto bg-amber-950 active:bg-amber-800 hover:bg-amber-700 text-amber-100 p-3 sm:p-4 rounded-xl text-sm sm:text-base font-semibold" 
       type="button"
@@ -99,14 +102,18 @@
         if #selected-recipes-input.value is '' 
           halt
         end
-        set recipes to #selected-recipes-input.value.split('|')
+        set recipeIds to #selected-recipes-input.value.split('|')
         put '' into #modal-recipe-list
-        repeat for recipe in recipes
+        put '' into #form-inputs-container
+        repeat for recipeId in recipeIds
+          set recipeBtn to the first <button[data-recipe-id='${recipeId}']/>  
+          get recipeBtn's @data-recipe-name
+          set recipeName to it
           append `
             <div class='flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-3 p-2 bg-amber-300 rounded-lg'>
-              <label class='flex-1 break-words text-sm sm:text-base'>${recipe}</label>
-              <select class='w-full sm:w-auto p-2 border-2 border-amber-950 rounded-xl bg-amber-100 text-sm sm:text-base' name='day-\${recipe}'>
-                <option value=''>Select Day</option>
+              <label class='flex-1 break-words text-sm sm:text-base'>${recipeName}</label>
+              <select required class='w-full sm:w-auto p-2 border-2 border-amber-950 rounded-xl bg-amber-100 text-sm sm:text-base' data-recipe-id='${recipeId}'>
+                <option value='Soon'>Select Day</option>
                 <option value='Monday'>Monday</option>
                 <option value='Tuesday'>Tuesday</option>
                 <option value='Wednesday'>Wednesday</option>
@@ -137,8 +144,18 @@
           class="w-full sm:w-auto bg-amber-950 hover:bg-amber-700 active:bg-amber-800 text-amber-100 p-3 rounded-xl text-sm sm:text-base"
           type="button"
           _="on click
-            log 'Create grocery list clicked'
-            add .hidden to #recipe-modal"
+            put '' into #form-inputs-container
+            for select in <select/> in #modal-recipe-list
+              get select's @data-recipe-id
+              set recipeId to it
+              get select.value
+              set weekday to it
+              if weekday is not ''
+                append `<input type='hidden' name='recipe_ids[]' value='${recipeId}'/><input type='hidden' name='weekdays[]' value='${weekday}'/>` to #form-inputs-container
+              end
+            end
+            add .hidden to #recipe-modal
+            send submit to #selected-recipes-form"
         >Create List</button>
       </div>
     </div>
