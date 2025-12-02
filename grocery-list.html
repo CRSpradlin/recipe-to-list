@@ -161,6 +161,36 @@
               class="flex flex-row items-center gap-2 p-2 sm:p-3 bg-amber-300 rounded-lg transition-all duration-200 ease-in-out"
               data-item-id="{{ .ID }}"
             >
+              <button 
+                hx-delete="/grocery-item/{{ .ID }}"
+                hx-swap="outerHTML swap:0s"
+                hx-target="closest div[data-item-id]"
+                class="p-2 hover:bg-amber-400 rounded transition-colors"
+                _="on click
+                    halt the event
+                    if I match .bg-red-500
+                      -- Second click: actually delete
+                      htmx.trigger(me, 'confirmed-delete')
+                    else
+                      -- First click: turn red
+                      add .bg-red-500 to me
+                      remove .hover:bg-amber-400 from me
+                    end
+                  end
+                  on click from elsewhere
+                    -- Reset if clicked elsewhere
+                    if I match .bg-red-500 and event.target is not me
+                      remove .bg-red-500 from me
+                      add .hover:bg-amber-400 to me
+                    end
+                  end"
+                hx-trigger="confirmed-delete"
+                onclick="event.stopPropagation()"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 text-amber-900">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                </svg>
+              </button>
               <div class="flex-1 select-text">
                 <label class="text-sm sm:text-base md:text-lg break-words font-semibold">{{ .Name }}</label>
                 <div class="text-xs sm:text-sm text-amber-950">
