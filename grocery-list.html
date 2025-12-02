@@ -12,90 +12,154 @@
   <div class="mb-6 sm:mb-8">
     <h1 class="block text-2xl sm:text-3xl md:text-4xl font-bold mb-4">Grocery List</h1>
     
-    <div id="grocery-item-list" class="flex flex-col gap-2 sm:gap-3" style="position: relative;">
+    <div id="grocery-item-list" class="flex flex-col gap-2 sm:gap-3" style="position: relative;"
+      _="on dragover
+          halt the event
+          set the dataTransfer.dropEffect of the event to 'move'
+          
+          -- Find closest item to cursor
+          set items to <div[data-item-id]/> in me
+          set closestItem to null
+          set closestDistance to 999999
+          set isAfter to false
+          
+          for item in items
+            set rect to item.getBoundingClientRect()
+            set itemMiddle to (rect.top + rect.bottom) / 2
+            
+            -- Distance to top of item
+            set distanceToTop to Math.abs(event.clientY - rect.top)
+            -- Distance to bottom of item
+            set distanceToBottom to Math.abs(event.clientY - rect.bottom)
+            
+            if distanceToTop < closestDistance
+              set closestDistance to distanceToTop
+              set closestItem to item
+              set isAfter to false
+            end
+            
+            if distanceToBottom < closestDistance
+              set closestDistance to distanceToBottom
+              set closestItem to item
+              set isAfter to true
+            end
+          end
+          
+          -- Clear all borders
+          remove .border-t-4 from items
+          remove .border-b-4 from items
+          remove .border-amber-950 from items
+          
+          -- Add border to closest position
+          if closestItem is not null
+            if isAfter
+              add .border-b-4 to closestItem
+              add .border-amber-950 to closestItem
+            else
+              add .border-t-4 to closestItem
+              add .border-amber-950 to closestItem
+            end
+          end
+        end
+        on drop
+          halt the event
+          
+          -- Get dragged element using data-dragging attribute
+          set items to <div[data-item-id]/> in me
+
+          set draggedElement to null
+          for item in items
+            if item's @data-dragging is 'true'
+              set draggedElement to item
+              break
+            end
+          end
+          
+          -- Store positions before move (FLIP technique)
+          for item in items
+            set rect to item.getBoundingClientRect()
+            set item's @data-old-y to rect.top
+          end
+          
+          -- Find closest item and position
+          set closestItem to null
+          set closestDistance to 999999
+          set isAfter to false
+          
+          for item in items
+            if item is not draggedElement
+              set rect to item.getBoundingClientRect()
+              
+              -- Distance to top of item
+              set distanceToTop to Math.abs(event.clientY - rect.top)
+              -- Distance to bottom of item
+              set distanceToBottom to Math.abs(event.clientY - rect.bottom)
+              
+              if distanceToTop < closestDistance
+                set closestDistance to distanceToTop
+                set closestItem to item
+                set isAfter to false
+              end
+              
+              if distanceToBottom < closestDistance
+                set closestDistance to distanceToBottom
+                set closestItem to item
+                set isAfter to true
+              end
+            end
+          end
+          
+          -- Insert at closest position
+          if closestItem is not null
+            if isAfter
+              put draggedElement after closestItem
+            else
+              put draggedElement before closestItem
+            end
+          end
+          
+          -- Animate items to new positions
+          wait 1ms
+          for item in items
+            set newRect to item.getBoundingClientRect()
+            set oldY to item's @data-old-y
+            if oldY is not null
+              set deltaY to oldY - newRect.top
+              if deltaY is not 0
+                remove .transition-all from item
+                remove .duration-200 from item
+                remove .ease-in-out from item
+                set item.style.transform to `translateY(${deltaY}px)`
+                wait 1ms
+                add .transition-all to item
+                add .duration-200 to item
+                add .ease-in-out to item
+                set item.style.transform to 'translateY(0)'
+              end
+            end
+          end
+          
+          -- Clean up styles
+          remove .border-t-4 from items
+          remove .border-b-4 from items
+          remove .border-amber-950 from items
+        end
+        on dragleave
+          -- Only clear borders if leaving the container entirely
+          if not me.contains(event.relatedTarget)
+            set items to <div[data-item-id]/> in me
+            remove .border-t-4 from items
+            remove .border-b-4 from items
+            remove .border-amber-950 from items
+          end
+        end"
+    >
       {{ block "grocery-item-list" . }}
         {{ range .GroceryItems }}
           {{ block "grocery-item" . }}
             <div 
               class="flex flex-row items-center gap-2 p-2 sm:p-3 bg-amber-300 rounded-lg transition-all duration-200 ease-in-out"
               data-item-id="{{ .ID }}"
-              _="on dragover
-                  halt the event
-                  set the dataTransfer.dropEffect of the event to 'move'
-                  
-                  -- Get the bounding rectangle
-                  set rect to me.getBoundingClientRect()
-                  set midpoint to (rect.top + rect.bottom) / 2
-                  
-                  -- Determine if cursor is in top or bottom half
-                  if event.clientY <= midpoint
-                    remove .border-b-4 from me
-                    remove .border-amber-950 from me
-                    add .border-t-4 to me
-                    add .border-amber-950 to me
-                  else
-                    remove .border-t-4 from me
-                    remove .border-amber-950 from me
-                    add .border-b-4 to me
-                    add .border-amber-950 to me
-                  end
-                end
-                on dragleave
-                  remove .border-t-4 from me
-                  remove .border-b-4 from me
-                  remove .border-amber-950 from me
-                end
-                on drop
-                  halt the event
-                  
-                  -- Get dragged element
-                  set draggedId to event.dataTransfer.getData('text/plain')
-                  set draggedElement to the first <div[data-item-id='${draggedId}']/>
-                  
-                  -- Store positions before move (FLIP technique)
-                  set items to <div[data-item-id]/> in #grocery-item-list
-                  for item in items
-                    set rect to item.getBoundingClientRect()
-                    set item's @data-old-y to rect.top
-                  end
-                  
-                  -- Get the bounding rectangle
-                  set rect to me.getBoundingClientRect()
-                  set midpoint to (rect.top + rect.bottom) / 2
-                  
-                  -- Insert before or after based on cursor position
-                  if event.clientY <= midpoint
-                    put draggedElement before me
-                  else
-                    put draggedElement after me
-                  end
-                  
-                  -- Animate items to new positions
-                  wait 1ms
-                  for item in items
-                    set newRect to item.getBoundingClientRect()
-                    set oldY to item's @data-old-y
-                    if oldY is not null
-                      set deltaY to oldY - newRect.top
-                      if deltaY is not 0
-                        remove .transition-all from item
-                        remove .duration-200 from item
-                        remove .ease-in-out from item
-                        set item.style.transform to `translateY(${deltaY}px)`
-                        wait 1ms
-                        add .transition-all to item
-                        add .duration-200 to item
-                        add .ease-in-out to item
-                        set item.style.transform to 'translateY(0)'
-                      end
-                    end
-                  end
-                  
-                  -- Clean up styles
-                  remove .border-t-4 from me
-                  remove .border-b-4 from me
-                  remove .border-amber-950 from me
-                end"
             >
               <div class="flex-1 select-text">
                 <label class="text-sm sm:text-base md:text-lg break-words font-semibold">{{ .Name }}</label>
@@ -119,9 +183,11 @@
                 _="on dragstart
                     set parent to my parentElement
                     add .opacity-50 to parent
-                    set the dataTransfer.effectAllowed of the event to 'move'
-                    set the dataTransfer.dropEffect of the event to 'move'
-                    call event.dataTransfer.setData('text/plain', '{{ .ID }}')
+                    
+                    -- Set data attributes like touch events
+                    set parent's @data-dragging to 'true'
+                    set parent's @data-start-y to event.clientY
+                    set parent's @data-item-id to '{{ .ID }}'
                     
                     -- Set the drag image to the parent element
                     set rect to parent.getBoundingClientRect()
@@ -133,6 +199,11 @@
                     remove .border-t-4 from <div[data-item-id]/> in #grocery-item-list
                     remove .border-b-4 from <div[data-item-id]/> in #grocery-item-list
                     remove .border-amber-950 from <div[data-item-id]/> in #grocery-item-list
+                    
+                    -- Clean up data attributes
+                    remove parent's @data-dragging
+                    remove parent's @data-start-y
+                    remove parent's @data-item-id
                   end
                   
                   -- Touch support for iOS Safari
