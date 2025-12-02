@@ -88,6 +88,20 @@ func main() {
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
 	http.HandleFunc("/", handleRootGetRequest)
 	http.HandleFunc("/recipe", handleRecipePostRequest)
+	http.HandleFunc("/recipe/", func(rw http.ResponseWriter, req *http.Request) {
+		if req.Method == http.MethodDelete {
+			handleRecipeDeleteRequest(rw, req)
+		} else {
+			http.NotFound(rw, req)
+		}
+	})
+	http.HandleFunc("/grocery-item/", func(rw http.ResponseWriter, req *http.Request) {
+		if req.Method == http.MethodDelete {
+			handleGroceryItemDeleteRequest(rw, req)
+		} else {
+			http.NotFound(rw, req)
+		}
+	})
 	http.HandleFunc("/grocery-list", func(rw http.ResponseWriter, req *http.Request) {
 		if req.Method == http.MethodPost {
 			handleGroceryListPostRequest(rw, req)
@@ -250,6 +264,31 @@ func updateRecipe(recipe Recipe) (Recipe, error) {
 	return recipe, nil
 }
 
+func deleteRecipe(id int64) error {
+	tx, dbBeginErr := db.Begin()
+	if dbBeginErr != nil {
+		return errors.Join(dbBeginErr, errors.New("could not start database tx for recipe delete"))
+	}
+
+	stmt, stmtPrepareError := tx.Prepare("delete from recipes where id=?")
+	if stmtPrepareError != nil {
+		return errors.Join(stmtPrepareError, errors.New("could not prepare statement for recipe delete"))
+	}
+	defer stmt.Close()
+
+	_, stmtExecErr := stmt.Exec(id)
+	if stmtExecErr != nil {
+		return errors.Join(stmtExecErr, errors.New("could not execute the recipe delete query statement"))
+	}
+
+	txCommitErr := tx.Commit()
+	if txCommitErr != nil {
+		return errors.Join(txCommitErr, errors.New("could not commit the recipe delete statement"))
+	}
+
+	return nil
+}
+
 func updateGroceryItem(item GroceryItem) (GroceryItem, error) {
 	tx, dbBeginErr := db.Begin()
 	if dbBeginErr != nil {
@@ -295,6 +334,31 @@ func updateGroceryItem(item GroceryItem) (GroceryItem, error) {
 	return item, nil
 }
 
+func deleteGroceryItem(id int64) error {
+	tx, dbBeginErr := db.Begin()
+	if dbBeginErr != nil {
+		return errors.Join(dbBeginErr, errors.New("could not start database tx for grocery item delete"))
+	}
+
+	stmt, stmtPrepareError := tx.Prepare("delete from groceries where id=?")
+	if stmtPrepareError != nil {
+		return errors.Join(stmtPrepareError, errors.New("could not prepare statement for grocery item delete"))
+	}
+	defer stmt.Close()
+
+	_, stmtExecErr := stmt.Exec(id)
+	if stmtExecErr != nil {
+		return errors.Join(stmtExecErr, errors.New("could not execute the grocery item delete query statement"))
+	}
+
+	txCommitErr := tx.Commit()
+	if txCommitErr != nil {
+		return errors.Join(txCommitErr, errors.New("could not commit the grocery item delete statement"))
+	}
+
+	return nil
+}
+
 func handleRootGetRequest(rw http.ResponseWriter, req *http.Request) {
 	allrecipes, getAllRecipesError := getAllRecipes()
 	if getAllRecipesError != nil {
@@ -330,6 +394,60 @@ func handleRecipePostRequest(rw http.ResponseWriter, req *http.Request) {
 
 	tmpl := template.Must(template.ParseFiles("index.html"))
 	tmpl.ExecuteTemplate(rw, "recipe", recipe)
+}
+
+func handleRecipeDeleteRequest(rw http.ResponseWriter, req *http.Request) {
+	// Extract ID from path (e.g., /recipe/123)
+	pathParts := strings.Split(strings.Trim(req.URL.Path, "/"), "/")
+	if len(pathParts) < 2 || pathParts[1] == "" {
+		http.Error(rw, "Missing id in path", http.StatusBadRequest)
+		return
+	}
+
+	idStr := pathParts[1]
+	id, parseErr := strconv.ParseInt(idStr, 10, 64)
+	if parseErr != nil {
+		log.Error("Failed to parse recipe ID", "ID", idStr, "Error", parseErr)
+		http.Error(rw, "Invalid id parameter", http.StatusBadRequest)
+		return
+	}
+
+	deleteErr := deleteRecipe(id)
+	if deleteErr != nil {
+		log.Error("Failed to delete recipe", "ID", id, "Error", deleteErr)
+		http.Error(rw, "Failed to delete recipe", http.StatusInternalServerError)
+		return
+	}
+
+	log.Info("Recipe deleted", "ID", id)
+	rw.WriteHeader(http.StatusOK)
+}
+
+func handleGroceryItemDeleteRequest(rw http.ResponseWriter, req *http.Request) {
+	// Extract ID from path (e.g., /grocery-item/123)
+	pathParts := strings.Split(strings.Trim(req.URL.Path, "/"), "/")
+	if len(pathParts) < 2 || pathParts[1] == "" {
+		http.Error(rw, "Missing id in path", http.StatusBadRequest)
+		return
+	}
+
+	idStr := pathParts[1]
+	id, parseErr := strconv.ParseInt(idStr, 10, 64)
+	if parseErr != nil {
+		log.Error("Failed to parse grocery item ID", "ID", idStr, "Error", parseErr)
+		http.Error(rw, "Invalid id parameter", http.StatusBadRequest)
+		return
+	}
+
+	deleteErr := deleteGroceryItem(id)
+	if deleteErr != nil {
+		log.Error("Failed to delete grocery item", "ID", id, "Error", deleteErr)
+		http.Error(rw, "Failed to delete grocery item", http.StatusInternalServerError)
+		return
+	}
+
+	log.Info("Grocery item deleted", "ID", id)
+	rw.WriteHeader(http.StatusOK)
 }
 
 func handleGroceryListPostRequest(rw http.ResponseWriter, req *http.Request) {
