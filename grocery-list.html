@@ -12,12 +12,92 @@
   <div class="mb-6 sm:mb-8">
     <h1 class="block text-2xl sm:text-3xl md:text-4xl font-bold mb-4">Grocery List</h1>
     
-    <div id="grocery-item-list" class="flex flex-col gap-2 sm:gap-3">
+    <div id="grocery-item-list" class="flex flex-col gap-2 sm:gap-3" style="position: relative;">
       {{ block "grocery-item-list" . }}
         {{ range .GroceryItems }}
           {{ block "grocery-item" . }}
-            <div class="flex flex-row items-center justify-between gap-2 p-2 sm:p-3 bg-amber-300 rounded-lg">
-              <div class="flex-1">
+            <div 
+              class="flex flex-row items-center gap-2 p-2 sm:p-3 bg-amber-300 rounded-lg transition-all duration-200 ease-in-out"
+              data-item-id="{{ .ID }}"
+              _="on dragover
+                  halt the event
+                  set the dataTransfer.dropEffect of the event to 'move'
+                  
+                  -- Get the bounding rectangle
+                  set rect to me.getBoundingClientRect()
+                  set midpoint to (rect.top + rect.bottom) / 2
+                  
+                  -- Determine if cursor is in top or bottom half
+                  if event.clientY <= midpoint
+                    remove .border-b-4 from me
+                    remove .border-amber-950 from me
+                    add .border-t-4 to me
+                    add .border-amber-950 to me
+                  else
+                    remove .border-t-4 from me
+                    remove .border-amber-950 from me
+                    add .border-b-4 to me
+                    add .border-amber-950 to me
+                  end
+                end
+                on dragleave
+                  remove .border-t-4 from me
+                  remove .border-b-4 from me
+                  remove .border-amber-950 from me
+                end
+                on drop
+                  halt the event
+                  
+                  -- Get dragged element
+                  set draggedId to event.dataTransfer.getData('text/plain')
+                  set draggedElement to the first <div[data-item-id='${draggedId}']/>
+                  
+                  -- Store positions before move (FLIP technique)
+                  set items to <div[data-item-id]/> in #grocery-item-list
+                  for item in items
+                    set rect to item.getBoundingClientRect()
+                    set item's @data-old-y to rect.top
+                  end
+                  
+                  -- Get the bounding rectangle
+                  set rect to me.getBoundingClientRect()
+                  set midpoint to (rect.top + rect.bottom) / 2
+                  
+                  -- Insert before or after based on cursor position
+                  if event.clientY <= midpoint
+                    put draggedElement before me
+                  else
+                    put draggedElement after me
+                  end
+                  
+                  -- Animate items to new positions
+                  wait 1ms
+                  for item in items
+                    set newRect to item.getBoundingClientRect()
+                    set oldY to item's @data-old-y
+                    if oldY is not null
+                      set deltaY to oldY - newRect.top
+                      if deltaY is not 0
+                        remove .transition-all from item
+                        remove .duration-200 from item
+                        remove .ease-in-out from item
+                        set item.style.transform to `translateY(${deltaY}px)`
+                        wait 1ms
+                        add .transition-all to item
+                        add .duration-200 to item
+                        add .ease-in-out to item
+                        set item.style.transform to 'translateY(0)'
+                      end
+                    end
+                  end
+                  
+                  -- Clean up styles
+                  remove .border-t-4 from me
+                  remove .border-b-4 from me
+                  remove .border-amber-950 from me
+                end"
+            >
+              <div class="flex-1 select-text">
                 <label class="text-sm sm:text-base md:text-lg break-words font-semibold">{{ .Name }}</label>
                 <div class="text-xs sm:text-sm text-amber-950">
                   <span>{{ .Recipe }}</span>
@@ -29,9 +109,209 @@
               <input 
                 type="checkbox" 
                 {{ if .Retrieved }}checked{{ end }}
-                class="w-6 h-6 rounded border-2 border-amber-950"
+                class="w-6 h-6 rounded border-2 p-2 border-amber-950"
                 data-item-id="{{ .ID }}"
+                onclick="event.stopPropagation()"
               />
+              <div 
+                draggable="true"
+                class="cursor-move p-2 touch-none select-none"
+                _="on dragstart
+                    set parent to my parentElement
+                    add .opacity-50 to parent
+                    set the dataTransfer.effectAllowed of the event to 'move'
+                    set the dataTransfer.dropEffect of the event to 'move'
+                    call event.dataTransfer.setData('text/plain', '{{ .ID }}')
+                    
+                    -- Set the drag image to the parent element
+                    set rect to parent.getBoundingClientRect()
+                    call event.dataTransfer.setDragImage(parent, event.clientX - rect.left, event.clientY - rect.top)
+                  end
+                  on dragend
+                    set parent to my parentElement
+                    remove .opacity-50 from parent
+                    remove .border-t-4 from <div[data-item-id]/> in #grocery-item-list
+                    remove .border-b-4 from <div[data-item-id]/> in #grocery-item-list
+                    remove .border-amber-950 from <div[data-item-id]/> in #grocery-item-list
+                  end
+                  
+                  -- Touch support for iOS Safari
+                  on touchstart
+                    halt the event
+                    set parent to my parentElement
+                    set touch to event.touches[0]
+                    set my @data-dragging to 'true'
+                    set my @data-start-y to touch.clientY
+                    set my @data-item-id to '{{ .ID }}'
+                    
+                    -- Store initial positions for FLIP animation
+                    set items to <div[data-item-id]/> in #grocery-item-list
+                    for item in items
+                      set rect to item.getBoundingClientRect()
+                      set item's @data-old-y to rect.top
+                    end
+                    
+                    -- Create drag preview
+                    set clone to parent.cloneNode(true)
+                    set clone.id to 'drag-preview'
+                    set parentRect to parent.getBoundingClientRect()
+                    set clone.style.position to 'fixed'
+                    set clone.style.left to `${parentRect.left}px`
+                    set clone.style.top to `${parentRect.top}px`
+                    set clone.style.width to `${parentRect.width}px`
+                    set clone.style.pointerEvents to 'none'
+                    set clone.style.zIndex to '1000'
+                    set clone.style.opacity to '0.9'
+                    set clone.style.transform to 'scale(1.05)'
+                    set clone.style.transition to 'none'
+                    
+                    -- Store offset for smooth dragging
+                    set my @data-offset-x to touch.clientX - parentRect.left
+                    set my @data-offset-y to touch.clientY - parentRect.top
+                    
+                    call document.body.appendChild(clone)
+                    add .opacity-30 to parent
+                  end
+                  
+                  on touchmove
+                    if my @data-dragging is 'true'
+                      halt the event
+                      set touch to event.touches[0]
+                      set touchY to touch.clientY
+                      
+                      -- Update drag preview position
+                      set preview to #drag-preview
+                      if preview is not null
+                        set offsetX to my @data-offset-x
+                        set offsetY to my @data-offset-y
+                        set preview.style.left to `${touch.clientX - offsetX}px`
+                        set preview.style.top to `${touch.clientY - offsetY}px`
+                      end
+                      
+                      -- Find element at touch point
+                      set elementsAtPoint to document.elementsFromPoint(touch.clientX, touchY)
+                      set targetItem to null
+                      for elem in elementsAtPoint
+                        if elem.hasAttribute('data-item-id') and elem.getAttribute('data-item-id') is not '{{ .ID }}'
+                          set targetItem to elem
+                          break
+                        end
+                      end
+                      
+                      -- Clear previous borders
+                      remove .border-t-4 from <div[data-item-id]/> in #grocery-item-list
+                      remove .border-b-4 from <div[data-item-id]/> in #grocery-item-list
+                      remove .border-amber-950 from <div[data-item-id]/> in #grocery-item-list
+                      
+                      -- Add border indicator
+                      if targetItem is not null
+                        set rect to targetItem.getBoundingClientRect()
+                        set midpoint to (rect.top + rect.bottom) / 2
+                        
+                        if touchY <= midpoint
+                          add .border-t-4 to targetItem
+                          add .border-amber-950 to targetItem
+                        else
+                          add .border-b-4 to targetItem
+                          add .border-amber-950 to targetItem
+                        end
+                      end
+                    end
+                  end
+                  
+                  on touchend
+                    if my @data-dragging is 'true'
+                      halt the event
+                      set parent to my parentElement
+                      set touch to event.changedTouches[0]
+                      set touchY to touch.clientY
+                      
+                      -- Find element at touch point
+                      set elementsAtPoint to document.elementsFromPoint(touch.clientX, touchY)
+                      set targetItem to null
+                      for elem in elementsAtPoint
+                        if elem.hasAttribute('data-item-id') and elem.getAttribute('data-item-id') is not '{{ .ID }}'
+                          set targetItem to elem
+                          break
+                        end
+                      end
+                      
+                      if targetItem is not null
+                        -- Reorder elements
+                        set rect to targetItem.getBoundingClientRect()
+                        set midpoint to (rect.top + rect.bottom) / 2
+                        
+                        if touchY <= midpoint
+                          put parent before targetItem
+                        else
+                          put parent after targetItem
+                        end
+                        
+                        -- Animate items to new positions
+                        wait 1ms
+                        set items to <div[data-item-id]/> in #grocery-item-list
+                        for item in items
+                          set newRect to item.getBoundingClientRect()
+                          set oldY to item's @data-old-y
+                          if oldY is not null
+                            set deltaY to oldY - newRect.top
+                            if deltaY is not 0
+                              remove .transition-all from item
+                              remove .duration-200 from item
+                              remove .ease-in-out from item
+                              set item.style.transform to `translateY(${deltaY}px)`
+                              wait 1ms
+                              add .transition-all to item
+                              add .duration-200 to item
+                              add .ease-in-out to item
+                              set item.style.transform to 'translateY(0)'
+                            end
+                          end
+                        end
+                      end
+                      
+                      -- Clean up
+                      remove .opacity-30 from parent
+                      remove .border-t-4 from <div[data-item-id]/> in #grocery-item-list
+                      remove .border-b-4 from <div[data-item-id]/> in #grocery-item-list
+                      remove .border-amber-950 from <div[data-item-id]/> in #grocery-item-list
+                      remove @data-dragging from me
+                      remove @data-start-y from me
+                      remove @data-offset-x from me
+                      remove @data-offset-y from me
+                      
+                      -- Remove drag preview
+                      set preview to #drag-preview
+                      if preview is not null
+                        call preview.remove()
+                      end
+                    end
+                  end
+                  
+                  on touchcancel
+                    if my @data-dragging is 'true'
+                      set parent to my parentElement
+                      remove .opacity-30 from parent
+                      remove .border-t-4 from <div[data-item-id]/> in #grocery-item-list
+                      remove .border-b-4 from <div[data-item-id]/> in #grocery-item-list
+                      remove .border-amber-950 from <div[data-item-id]/> in #grocery-item-list
+                      remove @data-dragging from me
+                      remove @data-start-y from me
+                      remove @data-offset-x from me
+                      remove @data-offset-y from me
+                      
+                      -- Remove drag preview
+                      set preview to #drag-preview
+                      if preview is not null
+                        call preview.remove()
+                      end
+                    end
+                  end"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 text-amber-950">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 9h16.5m-16.5 6.75h16.5" />
+                </svg>
+              </div>
             </div>
           {{ end }}
         {{ end }}
