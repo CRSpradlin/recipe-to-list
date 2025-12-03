@@ -315,9 +315,6 @@
   .rounded-lg {
     border-radius: var(--radius-lg);
   }
-  .rounded-xl {
-    border-radius: var(--radius-xl);
-  }
   .border {
     border-style: var(--tw-border-style);
     border-width: 1px;
@@ -340,9 +337,6 @@
   }
   .border-amber-950 {
     border-color: var(--color-amber-950);
-  }
-  .bg-amber-100 {
-    background-color: var(--color-amber-100);
   }
   .bg-amber-300 {
     background-color: var(--color-amber-300);
