@@ -12,6 +12,47 @@
   <div class="mb-6 sm:mb-8">
     <h1 class="block text-2xl sm:text-3xl md:text-4xl font-bold mb-4">Grocery List</h1>
     
+    <!-- Add Item Form -->
+    <form 
+      hx-post="/grocery-item"
+      hx-target="#grocery-item-list"
+      hx-swap="afterbegin"
+      class="mb-4 flex gap-2"
+      _="on htmx:afterRequest
+          if event.detail.successful
+            set my.querySelector('input[name=name]').value to ''
+            set my.querySelector('input[name=recurring]').checked to false
+          end
+        end"
+    >
+      <input 
+        type="text" 
+        name="name" 
+        placeholder="Add item..."
+        required
+        class="flex-1 px-3 py-2 bg-amber-300 border-2 border-amber-950 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-950 placeholder-amber-700"
+        _="on keydown[key=='Enter']
+            halt the event
+            trigger submit on closest <form/>
+          end"
+      />
+      <label class="flex items-center gap-2 px-3 py-2 bg-amber-300 border-2 border-amber-950 rounded-lg cursor-pointer hover:bg-amber-200 transition-colors">
+        <input 
+          type="checkbox" 
+          name="recurring"
+          value="true"
+          class="w-5 h-5 rounded border-2 border-amber-950"
+        />
+        <span class="text-sm font-semibold whitespace-nowrap">Recurring</span>
+      </label>
+      <button 
+        type="submit"
+        class="px-4 py-2 bg-amber-950 text-amber-100 font-semibold rounded-lg hover:bg-amber-900 transition-colors"
+      >
+        Add
+      </button>
+    </form>
+    
     <div id="grocery-item-list" class="flex flex-col gap-2 sm:gap-3" style="position: relative;"
       _="on dragover
           halt the event

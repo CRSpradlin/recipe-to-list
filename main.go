@@ -30,7 +30,8 @@ const SQLITE_DB_SCHEMA = `
 		retrieved boolean not null,
 		recipe text,
 		weekday text,
-		dtm date not null
+		dtm date not null,
+		recurring boolean not null
 	);
 `
 
@@ -49,6 +50,7 @@ type GroceryItem struct {
 	Recipe    string
 	Weekday   string
 	Dtm       time.Time
+	Recurring bool
 }
 
 type RootView struct {
@@ -95,6 +97,7 @@ func main() {
 			http.NotFound(rw, req)
 		}
 	})
+	http.HandleFunc("/grocery-item", handleGroceryItemPostRequest)
 	http.HandleFunc("/grocery-item/", func(rw http.ResponseWriter, req *http.Request) {
 		if req.Method == http.MethodDelete {
 			handleGroceryItemDeleteRequest(rw, req)
@@ -296,13 +299,13 @@ func updateGroceryItem(item GroceryItem) (GroceryItem, error) {
 	}
 
 	if item.ID == nil {
-		stmt, stmtPrepareError := tx.Prepare("insert into groceries(name,retrieved,recipe,weekday,dtm) values(?,?,?,?,?)")
+		stmt, stmtPrepareError := tx.Prepare("insert into groceries(name,retrieved,recipe,weekday,dtm,recurring) values(?,?,?,?,?,?)")
 		if stmtPrepareError != nil {
 			return item, errors.Join(stmtPrepareError, errors.New("could not prepare statement for grocery item create"))
 		}
 		defer stmt.Close()
 
-		result, stmtExecErr := stmt.Exec(item.Name, item.Retrieved, item.Recipe, item.Weekday, item.Dtm)
+		result, stmtExecErr := stmt.Exec(item.Name, item.Retrieved, item.Recipe, item.Weekday, item.Dtm, item.Recurring)
 		if stmtExecErr != nil {
 			return item, errors.Join(stmtExecErr, errors.New("could not execute the create grocery item query statement"))
 		}
@@ -315,12 +318,12 @@ func updateGroceryItem(item GroceryItem) (GroceryItem, error) {
 		item.ID = &createdId
 
 	} else {
-		stmt, stmtPrepareError := tx.Prepare("update groceries set name=?, retrieved=?, recipe=?, weekday=?, dtm=? where id=?")
+		stmt, stmtPrepareError := tx.Prepare("update groceries set name=?, retrieved=?, recipe=?, weekday=?, dtm=?, recurring=? where id=?")
 		if stmtPrepareError != nil {
 			return item, errors.Join(stmtPrepareError, errors.New("could not prepare statement for grocery item update"))
 		}
 
-		_, stmtExecErr := stmt.Exec(item.Name, item.Retrieved, item.Recipe, item.Weekday, item.Dtm, item.ID)
+		_, stmtExecErr := stmt.Exec(item.Name, item.Retrieved, item.Recipe, item.Weekday, item.Dtm, item.Recurring, item.ID)
 		if stmtExecErr != nil {
 			return item, errors.Join(stmtExecErr, errors.New("could not execute the grocery item update query statement"))
 		}
@@ -423,6 +426,37 @@ func handleRecipeDeleteRequest(rw http.ResponseWriter, req *http.Request) {
 	rw.WriteHeader(http.StatusOK)
 }
 
+func handleGroceryItemPostRequest(rw http.ResponseWriter, req *http.Request) {
+	itemName := req.PostFormValue("name")
+	if itemName == "" {
+		http.Error(rw, "Item name is required", http.StatusBadRequest)
+		return
+	}
+
+	recurring := req.PostFormValue("recurring") == "true"
+
+	newItem := GroceryItem{
+		Name:      itemName,
+		Retrieved: false,
+		Recipe:    "Ad-hoc",
+		Weekday:   "Soon",
+		Dtm:       time.Now(),
+		Recurring: recurring,
+	}
+
+	item, createErr := updateGroceryItem(newItem)
+	if createErr != nil {
+		log.Error("Failed to create grocery item", "Name", itemName, "Error", createErr)
+		http.Error(rw, "Failed to create grocery item", http.StatusInternalServerError)
+		return
+	}
+
+	log.Info("Ad-hoc grocery item created", "ID", item.ID, "Name", item.Name)
+
+	tmpl := template.Must(template.ParseFiles("grocery-list.html"))
+	tmpl.ExecuteTemplate(rw, "grocery-item", item)
+}
+
 func handleGroceryItemDeleteRequest(rw http.ResponseWriter, req *http.Request) {
 	// Extract ID from path (e.g., /grocery-item/123)
 	pathParts := strings.Split(strings.Trim(req.URL.Path, "/"), "/")
@@ -491,6 +525,7 @@ func handleGroceryListPostRequest(rw http.ResponseWriter, req *http.Request) {
 				Recipe:    recipeName,
 				Weekday:   weekday,
 				Dtm:       time.Now(),
+				Recurring: false,
 			}
 
 			item, itemErr := updateGroceryItem(newItem)
