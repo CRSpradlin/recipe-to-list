@@ -119,7 +119,7 @@ func main() {
 		}
 	})
 
-	webServerError := http.ListenAndServe("0.0.0.0:3000", nil)
+	webServerError := http.ListenAndServe("0.0.0.0:80", nil)
 
 	if webServerError != nil {
 		panic(errors.Join(webServerError, errors.New("error listening and serving web server")))
