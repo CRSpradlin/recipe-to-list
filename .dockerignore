@@ -6,7 +6,7 @@
 .gitignore
 
 # Ignore build artifacts
-recipe-app
+grocery-app
 *.exe
 
 # Ignore documentation

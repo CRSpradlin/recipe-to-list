@@ -17,7 +17,7 @@ RUN go mod download
 COPY . .
 
 # Build the application
-RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o recipe-app main.go
+RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o grocery-app main.go
 
 # Runtime stage
 FROM alpine:latest
