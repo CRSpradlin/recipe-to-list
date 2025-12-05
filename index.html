@@ -105,16 +105,33 @@
               data-recipe-id="{{ .ID }}"
               data-recipe-name="{{ .Name }}"
               _="on click
-                get #selected-recipes-input.value
-                if it is ''
-                  append `{{ .ID }}`
+                set recipeId to '{{ .ID }}'
+                
+                -- Check if already selected
+                if I match @selected-recipe
+                  -- Remove from selected list
+                  set selectedIds to #selected-recipes-input.value.split('|')
+
+                  set newIds to []
+                  repeat for id in selectedIds
+                    if id is not recipeId
+                      append id to newIds
+                    end
+                  end
+                  put newIds.join('|') into #selected-recipes-input.value
+                  put '+' into me
+                  remove @selected-recipe from me
                 else
-                  append `|{{ .ID }}`
+                  -- Add to selected list
+                  if #selected-recipes-input.value is ''
+                    put recipeId into #selected-recipes-input.value
+                  else
+                    put #selected-recipes-input.value + '|' + recipeId into #selected-recipes-input.value
+                  end
+                  put '✓' into me
+                  add @selected-recipe to me
                 end
-                put it into #selected-recipes-input.value
-                log #selected-recipes-input.value
-                put '✓' into me
-                add @disabled to me"
+                log #selected-recipes-input.value"
             >+</button>
           </div>
         {{ end }}
