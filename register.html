@@ -3,10 +3,18 @@
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <link href="/static/styles.css?v={{ .Version }}" rel="stylesheet" />
-  <title>Register - Brittany's Recipe App</title>
+  <title>Register - Brittany's Grocery Planner</title>
 </head>
 
-<body class="bg-amber-400 text-amber-950 min-h-screen flex items-center justify-center p-4">
+<body class="bg-amber-400 text-amber-950 min-h-screen">
+  <!-- Site Title -->
+  <div class="absolute top-4 left-4">
+    <a href="/" class="text-2xl font-bold text-amber-950 hover:text-amber-800 transition-colors">
+      Brittany's Grocery Planner
+    </a>
+  </div>
+
+  <div class="min-h-screen flex items-center justify-center">
   <div class="w-full max-w-md">
     <div class="p-6 sm:p-8">
       <h1 class="text-3xl sm:text-4xl font-bold mb-2 text-center">Create Account</h1>
@@ -205,5 +213,6 @@
       }
     });
   </script>
+  </div>
 </body>
 </html>

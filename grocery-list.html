@@ -3,14 +3,18 @@
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <link href="/static/styles.css?v={{ .Version }}" rel="stylesheet" />
+  <title>Grocery List - Brittany's Grocery Planner</title>
   <script src="https://unpkg.com/hyperscript.org@0.9.14"></script>
   <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js"></script>
 </head>
 
 <body class="bg-amber-400 text-amber-950 p-2 sm:p-4 md:p-6">
   
-  <!-- Logout button -->
-  <div class="flex justify-end mb-4">
+  <!-- Header with site title and logout -->
+  <div class="flex justify-between items-center mb-6">
+    <a href="/" class="text-2xl sm:text-3xl font-bold text-amber-950 hover:text-amber-800 transition-colors">
+      Brittany's Grocery Planner
+    </a>
     <a href="/logout" class="px-4 py-2 bg-amber-950 text-amber-100 font-semibold rounded-lg hover:bg-amber-900 transition-colors text-sm">
       🔒 Logout
     </a>
