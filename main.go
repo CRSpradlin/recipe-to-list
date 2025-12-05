@@ -2,9 +2,15 @@ package main
 
 import (
 	"github.com/charmbracelet/log"
+	"github.com/go-webauthn/webauthn/protocol"
+	"github.com/go-webauthn/webauthn/webauthn"
+	"github.com/gorilla/sessions"
 	_ "github.com/mattn/go-sqlite3"
 
+	"bytes"
 	"database/sql"
+	"encoding/gob"
+	"encoding/json"
 	"html/template"
 	"net/http"
 	"os"
@@ -33,9 +39,55 @@ const SQLITE_DB_SCHEMA = `
 		dtm date not null,
 		recurring boolean not null
 	);
+	create table if not exists users (
+		id integer not null primary key,
+		username text not null unique,
+		display_name text not null
+	);
+	create table if not exists credentials (
+		id blob not null primary key,
+		user_id integer not null,
+		public_key blob not null,
+		attestation_type text,
+		aaguid blob,
+		sign_count integer not null,
+		clone_warning boolean not null default 0,
+		backup_eligible boolean not null default 0,
+		backup_state boolean not null default 0,
+		transport text,
+		foreign key (user_id) references users(id) on delete cascade
+	);
 `
 
 const RECIPE_INGREDIENTS_DEL = "|"
+
+type User struct {
+	ID          int64
+	Username    string
+	DisplayName string
+	credentials []webauthn.Credential
+}
+
+// WebAuthn User interface implementation
+func (u *User) WebAuthnID() []byte {
+	return []byte(strconv.FormatInt(u.ID, 10))
+}
+
+func (u *User) WebAuthnName() string {
+	return u.Username
+}
+
+func (u *User) WebAuthnDisplayName() string {
+	return u.DisplayName
+}
+
+func (u *User) WebAuthnCredentials() []webauthn.Credential {
+	return u.credentials
+}
+
+func (u *User) WebAuthnIcon() string {
+	return ""
+}
 
 type Recipe struct {
 	ID          *int64
@@ -53,6 +105,10 @@ type GroceryItem struct {
 	Recurring bool
 }
 
+type UserView struct {
+	Version int64
+}
+
 type RootView struct {
 	Recipes []Recipe
 	Version int64
@@ -64,6 +120,8 @@ type GroceryListView struct {
 }
 
 var db *sql.DB
+var webAuthn *webauthn.WebAuthn
+var store *sessions.CookieStore
 
 func main() {
 
@@ -78,6 +136,28 @@ func main() {
 	db.QueryRow("select count(*) from recipes").Scan(&recipeCount)
 	log.Info("Database Initialized", "Recipe Count", recipeCount)
 
+	// Initialize session store with a secure random key
+	// In production, use a key from environment variable
+	store = sessions.NewCookieStore([]byte("super-secret-key-change-this-in-production-32bytes"))
+	store.Options = &sessions.Options{
+		Path:     "/",
+		MaxAge:   86400 * 7, // 7 days
+		HttpOnly: true,
+		Secure:   false, // Set to true in production with HTTPS
+		SameSite: http.SameSiteLaxMode,
+	}
+
+	// Initialize WebAuthn
+	var webAuthnErr error
+	webAuthn, webAuthnErr = webauthn.New(&webauthn.Config{
+		RPDisplayName: "Brittany's Recipe App",
+		RPID:          "localhost",
+		RPOrigins:     []string{"http://localhost:8080"},
+	})
+	if webAuthnErr != nil {
+		panic(errors.Join(webAuthnErr, errors.New("failed to initialize WebAuthn")))
+	}
+
 	// var newRecipe = Recipe{nil, "test recipe", []string{"apple", "pie"}}
 	// newRecipe, recipeCreateErr := updateRecipe(newRecipe)
 	// if recipeCreateErr != nil {
@@ -88,17 +168,28 @@ func main() {
 
 	log.Info("Listening from web server...")
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
-	http.HandleFunc("/", handleRootGetRequest)
-	http.HandleFunc("/recipe", handleRecipePostRequest)
-	http.HandleFunc("/recipe/", func(rw http.ResponseWriter, req *http.Request) {
+
+	// Auth endpoints (no auth required)
+	http.HandleFunc("/login", handleLoginPage)
+	http.HandleFunc("/register", handleRegisterPage)
+	http.HandleFunc("/register/begin", handleRegisterBegin)
+	http.HandleFunc("/register/finish", handleRegisterFinish)
+	http.HandleFunc("/login/begin", handleLoginBegin)
+	http.HandleFunc("/login/finish", handleLoginFinish)
+	http.HandleFunc("/logout", handleLogout)
+
+	// Protected endpoints
+	http.HandleFunc("/", requireAuth(handleRootGetRequest))
+	http.HandleFunc("/recipe", requireAuth(handleRecipePostRequest))
+	http.HandleFunc("/recipe/", requireAuth(func(rw http.ResponseWriter, req *http.Request) {
 		if req.Method == http.MethodDelete {
 			handleRecipeDeleteRequest(rw, req)
 		} else {
 			http.NotFound(rw, req)
 		}
-	})
-	http.HandleFunc("/grocery-item", handleGroceryItemPostRequest)
-	http.HandleFunc("/grocery-item/", func(rw http.ResponseWriter, req *http.Request) {
+	}))
+	http.HandleFunc("/grocery-item", requireAuth(handleGroceryItemPostRequest))
+	http.HandleFunc("/grocery-item/", requireAuth(func(rw http.ResponseWriter, req *http.Request) {
 		switch req.Method {
 		case http.MethodDelete:
 			handleGroceryItemDeleteRequest(rw, req)
@@ -107,8 +198,8 @@ func main() {
 		default:
 			http.NotFound(rw, req)
 		}
-	})
-	http.HandleFunc("/grocery-list", func(rw http.ResponseWriter, req *http.Request) {
+	}))
+	http.HandleFunc("/grocery-list", requireAuth(func(rw http.ResponseWriter, req *http.Request) {
 		switch req.Method {
 		case http.MethodPost:
 			handleGroceryListPostRequest(rw, req)
@@ -117,9 +208,10 @@ func main() {
 		default:
 			handleGroceryListGetRequest(rw, req)
 		}
-	})
+	}))
 
-	webServerError := http.ListenAndServe("0.0.0.0:80", nil)
+	log.Info("Server starting on http://localhost:8080")
+	webServerError := http.ListenAndServe("0.0.0.0:8080", nil)
 
 	if webServerError != nil {
 		panic(errors.Join(webServerError, errors.New("error listening and serving web server")))
@@ -157,6 +249,486 @@ func initSqliteDB() (*sql.DB, error) {
 	}
 
 	return initDB, nil
+}
+
+// Authentication middleware
+func requireAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(rw http.ResponseWriter, req *http.Request) {
+		session, _ := store.Get(req, "auth-session")
+		if auth, ok := session.Values["authenticated"].(bool); !ok || !auth {
+			http.Redirect(rw, req, "/login", http.StatusSeeOther)
+			return
+		}
+		next(rw, req)
+	}
+}
+
+// User database functions
+func getUserByUsername(username string) (*User, error) {
+	user := &User{}
+	err := db.QueryRow("select id, username, display_name from users where username=?", username).
+		Scan(&user.ID, &user.Username, &user.DisplayName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Load credentials
+	rows, err := db.Query(`
+		select id, public_key, attestation_type, aaguid, sign_count, clone_warning, backup_eligible, backup_state, transport 
+		from credentials where user_id=?`, user.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cred webauthn.Credential
+		var id, publicKey, aaguid []byte
+		var attestationType, transport string
+		var signCount uint32
+		var cloneWarning, backupEligible, backupState bool
+
+		err := rows.Scan(&id, &publicKey, &attestationType, &aaguid, &signCount, &cloneWarning, &backupEligible, &backupState, &transport)
+		if err != nil {
+			return nil, err
+		}
+
+		cred.ID = id
+		cred.PublicKey = publicKey
+		cred.AttestationType = attestationType
+		cred.Authenticator.AAGUID = aaguid
+		cred.Authenticator.SignCount = signCount
+		cred.Authenticator.CloneWarning = cloneWarning
+		cred.Flags.BackupEligible = backupEligible
+		cred.Flags.BackupState = backupState
+
+		// Parse transport
+		if transport != "" {
+			var transports []protocol.AuthenticatorTransport
+			parts := strings.Split(transport, ",")
+			for _, t := range parts {
+				transports = append(transports, protocol.AuthenticatorTransport(t))
+			}
+			cred.Transport = transports
+		}
+
+		user.credentials = append(user.credentials, cred)
+	}
+
+	return user, nil
+}
+
+func getUserByID(id int64) (*User, error) {
+	user := &User{}
+	err := db.QueryRow("select id, username, display_name from users where id=?", id).
+		Scan(&user.ID, &user.Username, &user.DisplayName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Load credentials
+	rows, err := db.Query(`
+		select id, public_key, attestation_type, aaguid, sign_count, clone_warning, backup_eligible, backup_state, transport 
+		from credentials where user_id=?`, user.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cred webauthn.Credential
+		var id, publicKey, aaguid []byte
+		var attestationType, transport string
+		var signCount uint32
+		var cloneWarning, backupEligible, backupState bool
+
+		err := rows.Scan(&id, &publicKey, &attestationType, &aaguid, &signCount, &cloneWarning, &backupEligible, &backupState, &transport)
+		if err != nil {
+			return nil, err
+		}
+
+		cred.ID = id
+		cred.PublicKey = publicKey
+		cred.AttestationType = attestationType
+		cred.Authenticator.AAGUID = aaguid
+		cred.Authenticator.SignCount = signCount
+		cred.Authenticator.CloneWarning = cloneWarning
+		cred.Flags.BackupEligible = backupEligible
+		cred.Flags.BackupState = backupState
+
+		// Parse transport
+		if transport != "" {
+			var transports []protocol.AuthenticatorTransport
+			parts := strings.Split(transport, ",")
+			for _, t := range parts {
+				transports = append(transports, protocol.AuthenticatorTransport(t))
+			}
+			cred.Transport = transports
+		}
+
+		user.credentials = append(user.credentials, cred)
+	}
+
+	return user, nil
+}
+
+func createUser(username, displayName string) (*User, error) {
+	result, err := db.Exec("insert into users(username, display_name) values(?,?)", username, displayName)
+	if err != nil {
+		return nil, err
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+
+	return &User{
+		ID:          id,
+		Username:    username,
+		DisplayName: displayName,
+		credentials: []webauthn.Credential{},
+	}, nil
+}
+
+func userCount() (int, error) {
+	var count int
+	err := db.QueryRow("select count(*) from users").Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func registrationEnableCheck(rw http.ResponseWriter, req *http.Request, uiRedirect bool) bool {
+	registeredUserCount, err := userCount()
+	if err != nil {
+		http.Error(rw, "Registered user validation check failed", http.StatusInternalServerError)
+		return false
+	}
+
+	if (registeredUserCount > 2) {
+		if uiRedirect {
+			http.Redirect(rw, req, "/login", http.StatusSeeOther)
+			return false
+		} else {
+			http.NotFound(rw, req)
+			return false
+		}
+	}
+	return true
+}
+
+func saveCredential(userID int64, cred *webauthn.Credential) error {
+	transport := ""
+	if len(cred.Transport) > 0 {
+		var parts []string
+		for _, t := range cred.Transport {
+			parts = append(parts, string(t))
+		}
+		transport = strings.Join(parts, ",")
+	}
+
+	_, err := db.Exec(`
+		insert into credentials(id, user_id, public_key, attestation_type, aaguid, sign_count, clone_warning, backup_eligible, backup_state, transport)
+		values(?,?,?,?,?,?,?,?,?,?)`,
+		cred.ID, userID, cred.PublicKey, cred.AttestationType, cred.Authenticator.AAGUID,
+		cred.Authenticator.SignCount, cred.Authenticator.CloneWarning, cred.Flags.BackupEligible, cred.Flags.BackupState, transport)
+	return err
+}
+
+func updateCredential(userID int64, cred *webauthn.Credential) error {
+	_, err := db.Exec(`
+		update credentials set sign_count=?, clone_warning=?, backup_eligible=?, backup_state=? where id=? and user_id=?`,
+		cred.Authenticator.SignCount, cred.Authenticator.CloneWarning, cred.Flags.BackupEligible, cred.Flags.BackupState, cred.ID, userID)
+	return err
+}
+
+// Auth handlers
+func handleLoginPage(rw http.ResponseWriter, req *http.Request) {
+	// Prevent caching
+	rw.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	rw.Header().Set("Pragma", "no-cache")
+	rw.Header().Set("Expires", "0")
+
+	tmplData := UserView{ Version: time.Now().Unix() }
+	tmpl := template.Must(template.ParseFiles("login.html"))
+	tmpl.Execute(rw, tmplData)
+}
+
+func handleRegisterPage(rw http.ResponseWriter, req *http.Request) {
+	// Is registration enabled?
+	if !registrationEnableCheck(rw, req, true) {
+		return
+	}
+
+	// Prevent caching
+	rw.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	rw.Header().Set("Pragma", "no-cache")
+	rw.Header().Set("Expires", "0")
+
+	tmplData := UserView{ Version: time.Now().Unix() }
+	tmpl := template.Must(template.ParseFiles("register.html"))
+	tmpl.Execute(rw, tmplData)
+}
+
+func handleRegisterBegin(rw http.ResponseWriter, req *http.Request) {
+	// Is registration enabled?
+	if !registrationEnableCheck(rw, req, false) {
+		return
+	}
+	
+	if req.Method != http.MethodPost {
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var requestData struct {
+		Username    string `json:"username"`
+		DisplayName string `json:"displayName"`
+	}
+
+	if err := json.NewDecoder(req.Body).Decode(&requestData); err != nil {
+		log.Error("Failed to decode register begin request", "Error", err)
+		http.Error(rw, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	// Check if user already exists
+	existingUser, _ := getUserByUsername(requestData.Username)
+	if existingUser != nil {
+		http.Error(rw, "Username already exists", http.StatusConflict)
+		return
+	}
+
+	// Create new user
+	user, err := createUser(requestData.Username, requestData.DisplayName)
+	if err != nil {
+		log.Error("Failed to create user", "Error", err)
+		http.Error(rw, "Failed to create user", http.StatusInternalServerError)
+		return
+	}
+
+	// Generate registration options
+	options, sessionData, err := webAuthn.BeginRegistration(user)
+	if err != nil {
+		log.Error("Failed to begin registration", "Error", err)
+		http.Error(rw, "Failed to begin registration", http.StatusInternalServerError)
+		return
+	}
+
+	// Store session data (encode to bytes for session storage)
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	if err := enc.Encode(sessionData); err != nil {
+		log.Error("Failed to encode session data", "Error", err)
+		http.Error(rw, "Failed to encode session data", http.StatusInternalServerError)
+		return
+	}
+
+	session, _ := store.Get(req, "auth-session")
+	session.Values["registration"] = buf.Bytes()
+	session.Values["userID"] = user.ID
+	session.Save(req, rw)
+
+	rw.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(rw).Encode(options)
+}
+
+func handleRegisterFinish(rw http.ResponseWriter, req *http.Request) {
+	// Is registration enabled?
+	if !registrationEnableCheck(rw, req, false) {
+		return
+	}
+	
+	if req.Method != http.MethodPost {
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	session, _ := store.Get(req, "auth-session")
+
+	// Decode registration session data
+	sessionBytes, ok := session.Values["registration"].([]byte)
+	if !ok {
+		http.Error(rw, "No registration in progress", http.StatusBadRequest)
+		return
+	}
+
+	var sessionData webauthn.SessionData
+	buf := bytes.NewBuffer(sessionBytes)
+	dec := gob.NewDecoder(buf)
+	if err := dec.Decode(&sessionData); err != nil {
+		log.Error("Failed to decode session data", "Error", err)
+		http.Error(rw, "Invalid session data", http.StatusBadRequest)
+		return
+	}
+
+	userID, ok := session.Values["userID"].(int64)
+	if !ok {
+		http.Error(rw, "No user ID in session", http.StatusBadRequest)
+		return
+	}
+
+	user, err := getUserByID(userID)
+	if err != nil {
+		log.Error("Failed to get user", "Error", err)
+		http.Error(rw, "User not found", http.StatusNotFound)
+		return
+	}
+
+	credential, err := webAuthn.FinishRegistration(user, sessionData, req)
+	if err != nil {
+		log.Error("Failed to finish registration", "Error", err)
+		http.Error(rw, "Failed to finish registration", http.StatusBadRequest)
+		return
+	}
+
+	// Save credential
+	if err := saveCredential(user.ID, credential); err != nil {
+		log.Error("Failed to save credential", "Error", err)
+		http.Error(rw, "Failed to save credential", http.StatusInternalServerError)
+		return
+	}
+
+	// Clear registration session data
+	delete(session.Values, "registration")
+	delete(session.Values, "userID")
+
+	// Mark user as authenticated
+	session.Values["authenticated"] = true
+	session.Values["username"] = user.Username
+	session.Values["userId"] = user.ID
+	session.Save(req, rw)
+
+	log.Info("User registered successfully", "Username", user.Username)
+
+	rw.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(rw).Encode(map[string]string{"status": "success"})
+}
+
+func handleLoginBegin(rw http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var requestData struct {
+		Username string `json:"username"`
+	}
+
+	if err := json.NewDecoder(req.Body).Decode(&requestData); err != nil {
+		log.Error("Failed to decode login begin request", "Error", err)
+		http.Error(rw, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	user, err := getUserByUsername(requestData.Username)
+	if err != nil {
+		http.Error(rw, "User not found", http.StatusNotFound)
+		return
+	}
+
+	options, sessionData, err := webAuthn.BeginLogin(user)
+	if err != nil {
+		log.Error("Failed to begin login", "Error", err)
+		http.Error(rw, "Failed to begin login", http.StatusInternalServerError)
+		return
+	}
+
+	// Store session data (encode to bytes for session storage)
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	if err := enc.Encode(sessionData); err != nil {
+		log.Error("Failed to encode session data", "Error", err)
+		http.Error(rw, "Failed to encode session data", http.StatusInternalServerError)
+		return
+	}
+
+	session, _ := store.Get(req, "auth-session")
+	session.Values["authentication"] = buf.Bytes()
+	session.Values["userID"] = user.ID
+	session.Save(req, rw)
+
+	rw.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(rw).Encode(options)
+}
+
+func handleLoginFinish(rw http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		http.Error(rw, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	session, _ := store.Get(req, "auth-session")
+
+	// Decode authentication session data
+	sessionBytes, ok := session.Values["authentication"].([]byte)
+	if !ok {
+		http.Error(rw, "No authentication in progress", http.StatusBadRequest)
+		return
+	}
+
+	var sessionData webauthn.SessionData
+	buf := bytes.NewBuffer(sessionBytes)
+	dec := gob.NewDecoder(buf)
+	if err := dec.Decode(&sessionData); err != nil {
+		log.Error("Failed to decode session data", "Error", err)
+		http.Error(rw, "Invalid session data", http.StatusBadRequest)
+		return
+	}
+
+	userID, ok := session.Values["userID"].(int64)
+	if !ok {
+		http.Error(rw, "No user ID in session", http.StatusBadRequest)
+		return
+	}
+
+	user, err := getUserByID(userID)
+	if err != nil {
+		log.Error("Failed to get user", "Error", err)
+		http.Error(rw, "User not found", http.StatusNotFound)
+		return
+	}
+
+	credential, err := webAuthn.FinishLogin(user, sessionData, req)
+	if err != nil {
+		log.Error("Failed to finish login", "Error", err)
+		http.Error(rw, "Failed to finish login", http.StatusBadRequest)
+		return
+	}
+
+	// Update credential sign count
+	if credential.Authenticator.SignCount > 0 {
+		if err := updateCredential(user.ID, credential); err != nil {
+			log.Error("Failed to update credential", "Error", err)
+		}
+	}
+
+	// Clear authentication session data
+	delete(session.Values, "authentication")
+	delete(session.Values, "userID")
+
+	// Mark user as authenticated
+	session.Values["authenticated"] = true
+	session.Values["username"] = user.Username
+	session.Values["userId"] = user.ID
+	session.Save(req, rw)
+
+	log.Info("User logged in successfully", "Username", user.Username)
+
+	rw.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(rw).Encode(map[string]string{"status": "success"})
+}
+
+func handleLogout(rw http.ResponseWriter, req *http.Request) {
+	session, _ := store.Get(req, "auth-session")
+	session.Values["authenticated"] = false
+	delete(session.Values, "username")
+	delete(session.Values, "userId")
+	session.Save(req, rw)
+
+	http.Redirect(rw, req, "/login", http.StatusSeeOther)
 }
 
 func getAllRecipes() ([]Recipe, error) {

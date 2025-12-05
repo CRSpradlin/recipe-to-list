@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <link href="/static/styles.css?v={{ .Version }}" rel="stylesheet" />
+  <title>Login - Brittany's Recipe App</title>
+</head>
+
+<body class="bg-amber-400 text-amber-950 min-h-screen flex items-center justify-center p-4">
+  <div class="w-full max-w-md">
+    <div class="p-6 sm:p-8">
+      <h1 class="text-3xl sm:text-4xl font-bold mb-2 text-center">Welcome Back</h1>
+      <p class="text-center text-amber-800 mb-8">Login with Passkey</p>
+
+      <!-- Error/Success Messages -->
+      <div id="message" class="hidden mb-4 p-3 rounded-lg text-sm"></div>
+
+      <!-- Login Form -->
+      <div id="auth-form">
+        <div class="mb-6">
+          <label class="block text-sm font-semibold mb-2">Username</label>
+          <input 
+            type="text" 
+            id="username" 
+            class="w-full p-3 bg-amber-200 border-2 border-amber-950 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-950"
+            placeholder="Enter your username"
+            autocomplete="username webauthn"
+            required
+          />
+        </div>
+
+        <div class="flex flex-col gap-3">
+          <button 
+            id="loginBtn"
+            class="w-full bg-amber-950 hover:bg-amber-800 text-amber-100 p-3 rounded-lg font-semibold transition-colors"
+          >
+            🔐 Login with Passkey
+          </button>
+        </div>
+
+        <div class="mt-6 text-center text-sm text-amber-800">
+          <p>🔒 Your device will ask you to verify your identity</p>
+          <p class="mt-1">Use fingerprint, face recognition, or security key</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const usernameInput = document.getElementById('username');
+    const loginBtn = document.getElementById('loginBtn');
+    const messageDiv = document.getElementById('message');
+
+    function showMessage(text, isError = false) {
+      messageDiv.textContent = text;
+      messageDiv.className = isError 
+        ? 'mb-4 p-3 rounded-lg text-sm bg-red-500 text-white'
+        : 'mb-4 p-3 rounded-lg text-sm bg-green-500 text-white';
+      messageDiv.classList.remove('hidden');
+      
+      if (!isError) {
+        setTimeout(() => {
+          messageDiv.classList.add('hidden');
+        }, 3000);
+      }
+    }
+
+    function hideMessage() {
+      messageDiv.classList.add('hidden');
+    }
+
+    // Helper to convert base64url to ArrayBuffer
+    function base64urlToBuffer(base64url) {
+      const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+      const padLen = (4 - (base64.length % 4)) % 4;
+      const padded = base64 + '='.repeat(padLen);
+      const binary = atob(padded);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return bytes.buffer;
+    }
+
+    // Helper to convert ArrayBuffer to base64url
+    function bufferToBase64url(buffer) {
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    }
+
+    // Login with passkey
+    loginBtn.addEventListener('click', async () => {
+      hideMessage();
+      const username = usernameInput.value.trim();
+
+      if (!username) {
+        showMessage('Please enter a username', true);
+        return;
+      }
+
+      try {
+        loginBtn.disabled = true;
+        loginBtn.textContent = '⏳ Starting login...';
+
+        // Begin login
+        const beginResponse = await fetch('/login/begin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username })
+        });
+
+        if (!beginResponse.ok) {
+          const error = await beginResponse.text();
+          throw new Error(error || 'Failed to begin login');
+        }
+
+        const options = await beginResponse.json();
+
+        // Convert challenge and allowCredentials from base64url
+        options.publicKey.challenge = base64urlToBuffer(options.publicKey.challenge);
+        if (options.publicKey.allowCredentials) {
+          for (let cred of options.publicKey.allowCredentials) {
+            cred.id = base64urlToBuffer(cred.id);
+          }
+        }
+
+        loginBtn.textContent = '👆 Please verify your identity...';
+
+        // Get credential
+        const assertion = await navigator.credentials.get(options);
+
+        loginBtn.textContent = '⏳ Finishing login...';
+
+        // Prepare assertion for server
+        const assertionJSON = {
+          id: assertion.id,
+          rawId: bufferToBase64url(assertion.rawId),
+          type: assertion.type,
+          response: {
+            authenticatorData: bufferToBase64url(assertion.response.authenticatorData),
+            clientDataJSON: bufferToBase64url(assertion.response.clientDataJSON),
+            signature: bufferToBase64url(assertion.response.signature),
+            userHandle: assertion.response.userHandle ? bufferToBase64url(assertion.response.userHandle) : null,
+          },
+        };
+
+        // Finish login
+        const finishResponse = await fetch('/login/finish', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(assertionJSON)
+        });
+
+        if (!finishResponse.ok) {
+          throw new Error('Failed to finish login');
+        }
+
+        showMessage('✅ Login successful! Redirecting...');
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 1000);
+
+      } catch (error) {
+        console.error('Login error:', error);
+        showMessage(error.message || 'Login failed. Please try again.', true);
+        loginBtn.disabled = false;
+        loginBtn.textContent = '🔐 Login with Passkey';
+      }
+    });
+
+    // Enter key support
+    usernameInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        loginBtn.click();
+      }
+    });
+  </script>
+</body>
+</html>

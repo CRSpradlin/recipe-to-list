@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <link href="/static/styles.css?v={{ .Version }}" rel="stylesheet" />
+  <title>Register - Brittany's Recipe App</title>
+</head>
+
+<body class="bg-amber-400 text-amber-950 min-h-screen flex items-center justify-center p-4">
+  <div class="w-full max-w-md">
+    <div class="p-6 sm:p-8">
+      <h1 class="text-3xl sm:text-4xl font-bold mb-2 text-center">Create Account</h1>
+      <p class="text-center text-amber-800 mb-8">Register with Passkey</p>
+
+      <!-- Error/Success Messages -->
+      <div id="message" class="hidden mb-4 p-3 rounded-lg text-sm"></div>
+
+      <!-- Registration Form -->
+      <div id="auth-form">
+        <div class="mb-6">
+          <label class="block text-sm font-semibold mb-2">Username</label>
+          <input 
+            type="text" 
+            id="username" 
+            class="w-full p-3 bg-amber-200 border-2 border-amber-950 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-950"
+            placeholder="Choose a username"
+            autocomplete="username webauthn"
+            required
+          />
+        </div>
+
+        <div class="mb-6">
+          <label class="block text-sm font-semibold mb-2">Display Name</label>
+          <input 
+            type="text" 
+            id="displayName" 
+            class="w-full p-3 bg-amber-200 border-2 border-amber-950 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-950"
+            placeholder="Your full name"
+            required
+          />
+        </div>
+
+        <div class="flex flex-col gap-3">
+          <button 
+            id="registerBtn"
+            class="w-full bg-amber-950 hover:bg-amber-800 text-amber-100 p-3 rounded-lg font-semibold transition-colors"
+          >
+            ✨ Register New Passkey
+          </button>
+        </div>
+
+        <div class="mt-6 text-center text-sm text-amber-800">
+          <p>🔒 Your device will ask you to verify your identity. Use fingerprint, face recognition, or security key</p>
+        </div>
+
+        <div class="mt-12 text-center">
+          <p class="text-sm text-amber-800 mb-2">Already have an account?</p>
+          <a href="/login" class="text-amber-950 font-semibold hover:underline">
+            Login here
+          </a>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const usernameInput = document.getElementById('username');
+    const displayNameInput = document.getElementById('displayName');
+    const registerBtn = document.getElementById('registerBtn');
+    const messageDiv = document.getElementById('message');
+
+    function showMessage(text, isError = false) {
+      messageDiv.textContent = text;
+      messageDiv.className = isError 
+        ? 'mb-4 p-3 rounded-lg text-sm bg-red-500 text-white'
+        : 'mb-4 p-3 rounded-lg text-sm bg-green-500 text-white';
+      messageDiv.classList.remove('hidden');
+      
+      if (!isError) {
+        setTimeout(() => {
+          messageDiv.classList.add('hidden');
+        }, 3000);
+      }
+    }
+
+    function hideMessage() {
+      messageDiv.classList.add('hidden');
+    }
+
+    // Helper to convert base64url to ArrayBuffer
+    function base64urlToBuffer(base64url) {
+      const base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+      const padLen = (4 - (base64.length % 4)) % 4;
+      const padded = base64 + '='.repeat(padLen);
+      const binary = atob(padded);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return bytes.buffer;
+    }
+
+    // Helper to convert ArrayBuffer to base64url
+    function bufferToBase64url(buffer) {
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    }
+
+    // Register new passkey
+    registerBtn.addEventListener('click', async () => {
+      hideMessage();
+      const username = usernameInput.value.trim();
+      const displayName = displayNameInput.value.trim() || username;
+
+      if (!username) {
+        showMessage('Please enter a username', true);
+        return;
+      }
+
+      if (!displayName) {
+        showMessage('Please enter a display name', true);
+        return;
+      }
+
+      try {
+        registerBtn.disabled = true;
+        registerBtn.textContent = '⏳ Starting registration...';
+
+        // Begin registration
+        const beginResponse = await fetch('/register/begin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, displayName })
+        });
+
+        if (!beginResponse.ok) {
+          const error = await beginResponse.text();
+          throw new Error(error || 'Failed to begin registration');
+        }
+
+        const options = await beginResponse.json();
+
+        // Convert challenge and user ID from base64url
+        options.publicKey.challenge = base64urlToBuffer(options.publicKey.challenge);
+        options.publicKey.user.id = base64urlToBuffer(options.publicKey.user.id);
+
+        registerBtn.textContent = '👆 Please verify your identity...';
+
+        // Create credential
+        const credential = await navigator.credentials.create(options);
+
+        registerBtn.textContent = '⏳ Finishing registration...';
+
+        // Prepare credential for server
+        const credentialJSON = {
+          id: credential.id,
+          rawId: bufferToBase64url(credential.rawId),
+          type: credential.type,
+          response: {
+            attestationObject: bufferToBase64url(credential.response.attestationObject),
+            clientDataJSON: bufferToBase64url(credential.response.clientDataJSON),
+          },
+        };
+
+        // Finish registration
+        const finishResponse = await fetch('/register/finish', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(credentialJSON)
+        });
+
+        if (!finishResponse.ok) {
+          throw new Error('Failed to finish registration');
+        }
+
+        showMessage('✅ Registration successful! Redirecting...');
+        setTimeout(() => {
+          window.location.href = '/';
+        }, 1000);
+
+      } catch (error) {
+        console.error('Registration error:', error);
+        showMessage(error.message || 'Registration failed. Please try again.', true);
+        registerBtn.disabled = false;
+        registerBtn.textContent = '✨ Register New Passkey';
+      }
+    });
+
+    // Enter key support
+    displayNameInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        registerBtn.click();
+      }
+    });
+
+    usernameInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        displayNameInput.focus();
+      }
+    });
+  </script>
+</body>
+</html>
