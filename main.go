@@ -106,9 +106,12 @@ func main() {
 		}
 	})
 	http.HandleFunc("/grocery-list", func(rw http.ResponseWriter, req *http.Request) {
-		if req.Method == http.MethodPost {
+		switch req.Method {
+		case http.MethodPost:
 			handleGroceryListPostRequest(rw, req)
-		} else {
+		case http.MethodDelete:
+			handleGroceryListDeleteRequest(rw, req)
+		default:
 			handleGroceryListGetRequest(rw, req)
 		}
 	})
@@ -220,6 +223,48 @@ func getAllGroceryItems() ([]GroceryItem, error) {
 
 	rows.Close()
 	return items, nil
+}
+
+func resetAllGroceryItems() error {
+	tx, dbBeginErr := db.Begin()
+	if dbBeginErr != nil {
+		return errors.Join(dbBeginErr, errors.New("could not start database tx for resetting grocery items"))
+	}
+
+	// Delete all non-recurring items
+	deleteStmt, deletePrepareError := tx.Prepare("delete from groceries where recurring = 0")
+	if deletePrepareError != nil {
+		tx.Rollback()
+		return errors.Join(deletePrepareError, errors.New("could not prepare statement for deleting non-recurring items"))
+	}
+	defer deleteStmt.Close()
+
+	_, deleteExecErr := deleteStmt.Exec()
+	if deleteExecErr != nil {
+		tx.Rollback()
+		return errors.Join(deleteExecErr, errors.New("could not execute delete non-recurring items statement"))
+	}
+
+	// Reset retrieved status for all recurring items
+	updateStmt, updatePrepareError := tx.Prepare("update groceries set retrieved = 0 where recurring = 1")
+	if updatePrepareError != nil {
+		tx.Rollback()
+		return errors.Join(updatePrepareError, errors.New("could not prepare statement for resetting recurring items"))
+	}
+	defer updateStmt.Close()
+
+	_, updateExecErr := updateStmt.Exec()
+	if updateExecErr != nil {
+		tx.Rollback()
+		return errors.Join(updateExecErr, errors.New("could not execute reset recurring items statement"))
+	}
+
+	txCommitErr := tx.Commit()
+	if txCommitErr != nil {
+		return errors.Join(txCommitErr, errors.New("could not commit the reset grocery items transaction"))
+	}
+
+	return nil
 }
 
 func updateRecipe(recipe Recipe) (Recipe, error) {
@@ -558,4 +603,14 @@ func handleGroceryListGetRequest(rw http.ResponseWriter, req *http.Request) {
 	tmplData := GroceryListView{GroceryItems: allGroceryItems, Version: time.Now().Unix()}
 	tmpl := template.Must(template.ParseFiles("grocery-list.html"))
 	tmpl.Execute(rw, tmplData)
+}
+
+func handleGroceryListDeleteRequest(rw http.ResponseWriter, req *http.Request) {
+	resetErr := resetAllGroceryItems()
+	if resetErr != nil {
+		panic(resetErr)
+	}
+
+	log.Info("Grocery list reset successfully")
+	rw.WriteHeader(http.StatusOK)
 }
