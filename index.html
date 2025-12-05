@@ -17,7 +17,6 @@
               reset() me then
               put '' into #new-recipe-ingredient-list
             end
-            log 'That went well!'
         "
     >
       <div class="flex flex-col gap-1">
@@ -142,20 +141,51 @@
   <form id="selected-recipes-form" class="mb-6" hx-post="/grocery-list" hx-swap="none">
     <input id="selected-recipes-input" class="hidden" name="selected-recipes" type="text" />
     <div id="form-inputs-container" class="hidden"></div>
-    <button 
-      class="w-full sm:w-auto bg-amber-950 active:bg-amber-800 hover:bg-amber-700 text-amber-100 p-3 sm:p-4 rounded-lg text-sm sm:text-base font-semibold" 
-      type="button"
-      _="on click
-        if #selected-recipes-input.value is '' 
-          halt
-        end
-        set recipeIds to #selected-recipes-input.value.split('|')
-        put '' into #modal-recipe-list
-        put '' into #form-inputs-container
-        repeat for recipeId in recipeIds
-          set recipeBtn to the first <button[data-recipe-id='${recipeId}']/>  
-          get recipeBtn's @data-recipe-name
-          set recipeName to it
+    <div class="flex flex-col sm:flex-row gap-2 sm:gap-3 justify-between">
+      <button 
+        hx-delete="/grocery-list"
+        hx-swap="none"
+        class="w-full sm:w-auto p-3 sm:p-4 hover:bg-amber-400 rounded-lg transition-colors bg-amber-300 border-2 border-amber-950 text-sm sm:text-base font-semibold"
+        type="button"
+        _="on click
+            halt the event
+            if I match .bg-red-500
+              -- Second click: actually delete
+              htmx.trigger(me, 'confirmed-delete')
+              remove .bg-red-500 from me
+              add .hover:bg-amber-400 to me
+              add .bg-amber-300 to me
+            else
+              -- First click: turn red
+              add .bg-red-500 to me
+              remove .hover:bg-amber-400 from me
+              remove .bg-amber-300 from me
+            end
+          end
+          on click from elsewhere
+            -- Reset if clicked elsewhere
+            if I match .bg-red-500 and event.target is not me
+              remove .bg-red-500 from me
+              add .hover:bg-amber-400 to me
+              add .bg-amber-300 to me
+            end
+          end"
+        hx-trigger="confirmed-delete"
+      >Reset List</button>
+      <button 
+        class="w-full sm:w-auto bg-amber-950 active:bg-amber-800 hover:bg-amber-700 text-amber-100 p-3 sm:p-4 rounded-lg text-sm sm:text-base font-semibold" 
+        type="button"
+        _="on click
+          if #selected-recipes-input.value is '' 
+            halt
+          end
+          set recipeIds to #selected-recipes-input.value.split('|')
+          put '' into #modal-recipe-list
+          put '' into #form-inputs-container
+          repeat for recipeId in recipeIds
+            set recipeBtn to the first <button[data-recipe-id='${recipeId}']/>  
+            get recipeBtn's @data-recipe-name
+            set recipeName to it
           append `
             <div class='flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-3 p-2 bg-amber-300 rounded-lg'>
               <label class='flex-1 break-words text-sm sm:text-base'>${recipeName}</label>
@@ -173,7 +203,8 @@
           ` to #modal-recipe-list
         end
         remove .hidden from #recipe-modal"
-    >Create Grocery List</button>
+      >Create Grocery List</button>
+    </div>
   </form>
   
   <!-- Modal -->
