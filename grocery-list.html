@@ -246,6 +246,11 @@
                 {{ if .Retrieved }}checked{{ end }}
                 class="w-6 h-6 rounded border-2 p-2 border-amber-950"
                 data-item-id="{{ .ID }}"
+                hx-patch="/grocery-item/{{ .ID }}"
+                hx-trigger="change"
+                hx-swap="outerHTML"
+                hx-target="closest div[data-item-id]"
+                hx-vals='js:{id: "{{ .ID }}", retrieved: event.target.checked ? "true" : "false"}'
                 onclick="event.stopPropagation()"
               />
               <div 

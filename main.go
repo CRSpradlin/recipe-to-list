@@ -99,9 +99,12 @@ func main() {
 	})
 	http.HandleFunc("/grocery-item", handleGroceryItemPostRequest)
 	http.HandleFunc("/grocery-item/", func(rw http.ResponseWriter, req *http.Request) {
-		if req.Method == http.MethodDelete {
+		switch req.Method {
+		case http.MethodDelete:
 			handleGroceryItemDeleteRequest(rw, req)
-		} else {
+		case http.MethodPatch:
+			handleGroceryItemPatchRequest(rw, req)
+		default:
 			http.NotFound(rw, req)
 		}
 	})
@@ -469,6 +472,75 @@ func handleRecipeDeleteRequest(rw http.ResponseWriter, req *http.Request) {
 
 	log.Info("Recipe deleted", "ID", id)
 	rw.WriteHeader(http.StatusOK)
+}
+
+func handleGroceryItemPatchRequest(rw http.ResponseWriter, req *http.Request) {
+	// Parse the form data
+	err := req.ParseForm()
+	if err != nil {
+		http.Error(rw, "Failed to parse form data", http.StatusBadRequest)
+		return
+	}
+
+	// ID is required
+	idStr := req.PostFormValue("id")
+	if idStr == "" {
+		http.Error(rw, "Item ID is required", http.StatusBadRequest)
+		return
+	}
+
+	id, parseErr := strconv.ParseInt(idStr, 10, 64)
+	if parseErr != nil {
+		log.Error("Failed to parse grocery item ID", "ID", idStr, "Error", parseErr)
+		http.Error(rw, "Invalid ID parameter", http.StatusBadRequest)
+		return
+	}
+
+	// Fetch existing grocery item from database
+	var existingItem GroceryItem
+	var retrieved bool
+	var recurring bool
+	queryErr := db.QueryRow("select name, retrieved, recipe, weekday, dtm, recurring from groceries where id=?", id).
+		Scan(&existingItem.Name, &retrieved, &existingItem.Recipe, &existingItem.Weekday, &existingItem.Dtm, &recurring)
+	if queryErr != nil {
+		log.Error("Failed to query grocery item", "ID", id, "Error", queryErr)
+		http.Error(rw, "Grocery item not found", http.StatusNotFound)
+		return
+	}
+	existingItem.ID = &id
+	existingItem.Retrieved = retrieved
+	existingItem.Recurring = recurring
+
+	// Update with form values if provided
+	if name := req.PostFormValue("name"); name != "" {
+		existingItem.Name = name
+	}
+	if retrievedStr := req.PostFormValue("retrieved"); retrievedStr != "" {
+		existingItem.Retrieved = retrievedStr == "true"
+	}
+	if recipe := req.PostFormValue("recipe"); recipe != "" {
+		existingItem.Recipe = recipe
+	}
+	if weekday := req.PostFormValue("weekday"); weekday != "" {
+		existingItem.Weekday = weekday
+	}
+	if recurringStr := req.PostFormValue("recurring"); recurringStr != "" {
+		existingItem.Recurring = recurringStr == "true"
+	}
+	// Note: dtm is typically not updated via form, but keeping existing value
+
+	// Update the item in the database
+	updatedItem, updateErr := updateGroceryItem(existingItem)
+	if updateErr != nil {
+		log.Error("Failed to update grocery item", "ID", id, "Error", updateErr)
+		http.Error(rw, "Failed to update grocery item", http.StatusInternalServerError)
+		return
+	}
+
+	log.Info("Grocery item updated", "ID", updatedItem.ID, "Name", updatedItem.Name)
+
+	tmpl := template.Must(template.ParseFiles("grocery-list.html"))
+	tmpl.ExecuteTemplate(rw, "grocery-item", updatedItem)
 }
 
 func handleGroceryItemPostRequest(rw http.ResponseWriter, req *http.Request) {
