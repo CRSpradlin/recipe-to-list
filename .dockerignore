@@ -1,0 +1,25 @@
+# Ignore data directory
+.data/
+
+# Ignore git
+.git/
+.gitignore
+
+# Ignore build artifacts
+recipe-app
+*.exe
+
+# Ignore documentation
+*.md
+!README.md
+
+# Ignore development files
+.vscode/
+.idea/
+
+# Ignore scripts
+*.sh
+
+# Ignore temporary files
+*.tmp
+*.log

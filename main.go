@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/charmbracelet/log"
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
@@ -151,8 +153,8 @@ func main() {
 	var webAuthnErr error
 	webAuthn, webAuthnErr = webauthn.New(&webauthn.Config{
 		RPDisplayName: "Brittany's Recipe App",
-		RPID:          "localhost",
-		RPOrigins:     []string{"http://localhost:8080"},
+		RPID:          os.Getenv("BGP_RPID"),
+		RPOrigins:     []string{"http://localhost:8080", fmt.Sprintf("https://%s", os.Getenv("BGP_RPID"))},
 	})
 	if webAuthnErr != nil {
 		panic(errors.Join(webAuthnErr, errors.New("failed to initialize WebAuthn")))
