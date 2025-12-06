@@ -457,7 +457,7 @@ func handleLoginPage(rw http.ResponseWriter, req *http.Request) {
 	rw.Header().Set("Expires", "0")
 
 	tmplData := UserView{ Version: time.Now().Unix() }
-	tmpl := template.Must(template.ParseFiles("login.html"))
+	tmpl := template.Must(template.ParseFiles("templates/login.html"))
 	tmpl.Execute(rw, tmplData)
 }
 
@@ -473,7 +473,7 @@ func handleRegisterPage(rw http.ResponseWriter, req *http.Request) {
 	rw.Header().Set("Expires", "0")
 
 	tmplData := UserView{ Version: time.Now().Unix() }
-	tmpl := template.Must(template.ParseFiles("register.html"))
+	tmpl := template.Must(template.ParseFiles("templates/register.html"))
 	tmpl.Execute(rw, tmplData)
 }
 
@@ -1001,7 +1001,7 @@ func handleRootGetRequest(rw http.ResponseWriter, req *http.Request) {
 	rw.Header().Set("Expires", "0")
 
 	tmplData := RootView{Recipes: allrecipes, Version: time.Now().Unix()}
-	tmpl := template.Must(template.ParseFiles("index.html"))
+	tmpl := template.Must(template.ParseFiles("templates/index.html"))
 	tmpl.Execute(rw, tmplData)
 }
 
@@ -1020,7 +1020,7 @@ func handleRecipePostRequest(rw http.ResponseWriter, req *http.Request) {
 		panic(createRecipeErr)
 	}
 
-	tmpl := template.Must(template.ParseFiles("index.html"))
+	tmpl := template.Must(template.ParseFiles("templates/index.html"))
 	tmpl.ExecuteTemplate(rw, "recipe", recipe)
 }
 
@@ -1091,7 +1091,7 @@ func handleRecipeUpdateRequest(rw http.ResponseWriter, req *http.Request) {
 	log.Info("Recipe updated", "ID", id, "Name", updatedRecipe.Name)
 
 	// Return updated recipe HTML
-	tmpl := template.Must(template.ParseFiles("index.html"))
+	tmpl := template.Must(template.ParseFiles("templates/index.html"))
 	tmpl.ExecuteTemplate(rw, "recipe", updatedRecipe)
 }
 
@@ -1160,7 +1160,7 @@ func handleGroceryItemPatchRequest(rw http.ResponseWriter, req *http.Request) {
 
 	log.Info("Grocery item updated", "ID", updatedItem.ID, "Name", updatedItem.Name)
 
-	tmpl := template.Must(template.ParseFiles("grocery-list.html"))
+	tmpl := template.Must(template.ParseFiles("templates/grocery-list.html"))
 	tmpl.ExecuteTemplate(rw, "grocery-item", updatedItem)
 }
 
@@ -1191,7 +1191,7 @@ func handleGroceryItemPostRequest(rw http.ResponseWriter, req *http.Request) {
 
 	log.Info("Ad-hoc grocery item created", "ID", item.ID, "Name", item.Name)
 
-	tmpl := template.Must(template.ParseFiles("grocery-list.html"))
+	tmpl := template.Must(template.ParseFiles("templates/grocery-list.html"))
 	tmpl.ExecuteTemplate(rw, "grocery-item", item)
 }
 
@@ -1294,7 +1294,7 @@ func handleGroceryListGetRequest(rw http.ResponseWriter, req *http.Request) {
 	rw.Header().Set("Expires", "0")
 
 	tmplData := GroceryListView{GroceryItems: allGroceryItems, Version: time.Now().Unix()}
-	tmpl := template.Must(template.ParseFiles("grocery-list.html"))
+	tmpl := template.Must(template.ParseFiles("templates/grocery-list.html"))
 	tmpl.Execute(rw, tmplData)
 }
 
