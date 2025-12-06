@@ -184,9 +184,12 @@ func main() {
 	http.HandleFunc("/", requireAuth(handleRootGetRequest))
 	http.HandleFunc("/recipe", requireAuth(handleRecipePostRequest))
 	http.HandleFunc("/recipe/", requireAuth(func(rw http.ResponseWriter, req *http.Request) {
-		if req.Method == http.MethodDelete {
+		switch req.Method {
+		case http.MethodDelete:
 			handleRecipeDeleteRequest(rw, req)
-		} else {
+		case http.MethodPut, http.MethodPatch:
+			handleRecipeUpdateRequest(rw, req)
+		default:
 			http.NotFound(rw, req)
 		}
 	}))
@@ -870,12 +873,12 @@ func updateRecipe(recipe Recipe) (Recipe, error) {
 		recipe.ID = &createdId
 
 	} else {
-		stmt, stmtPrepareError := tx.Prepare("update recipes set ingredients=? where id=?")
+		stmt, stmtPrepareError := tx.Prepare("update recipes set name=?, ingredients=? where id=?")
 		if stmtPrepareError != nil {
 			return recipe, errors.Join(stmtPrepareError, errors.New("could not prepare statement for recipe update"))
 		}
 
-		_, stmtExecErr := stmt.Exec(strings.Join(recipe.Ingredients, "|"), recipe.ID)
+		_, stmtExecErr := stmt.Exec(recipe.Name, strings.Join(recipe.Ingredients, "|"), recipe.ID)
 		if stmtExecErr != nil {
 			return recipe, errors.Join(stmtExecErr, errors.New("could not execute the recipe update query statement"))
 		}
@@ -1046,6 +1049,50 @@ func handleRecipeDeleteRequest(rw http.ResponseWriter, req *http.Request) {
 
 	log.Info("Recipe deleted", "ID", id)
 	rw.WriteHeader(http.StatusOK)
+}
+
+func handleRecipeUpdateRequest(rw http.ResponseWriter, req *http.Request) {
+	idStr := req.PostFormValue("id")
+	id, parseErr := strconv.ParseInt(idStr, 10, 64)
+	if parseErr != nil {
+		log.Error("Failed to parse recipe ID", "ID", idStr, "Error", parseErr)
+		http.Error(rw, "Invalid id parameter", http.StatusBadRequest)
+		return
+	}
+
+	// Get form values
+	recipeName := req.PostFormValue("name")
+	ingredientsStr := req.PostFormValue("ingredients")
+
+	if recipeName == "" {
+		http.Error(rw, "Recipe name is required", http.StatusBadRequest)
+		return
+	}
+
+	if ingredientsStr == "" {
+		http.Error(rw, "At least one ingredient is required", http.StatusBadRequest)
+		return
+	}
+
+	// Update recipe
+	recipe := Recipe{
+		ID:          &id,
+		Name:        recipeName,
+		Ingredients: strings.Split(ingredientsStr, RECIPE_INGREDIENTS_DEL),
+	}
+
+	updatedRecipe, updateErr := updateRecipe(recipe)
+	if updateErr != nil {
+		log.Error("Failed to update recipe", "ID", id, "Error", updateErr)
+		http.Error(rw, "Failed to update recipe", http.StatusInternalServerError)
+		return
+	}
+
+	log.Info("Recipe updated", "ID", id, "Name", updatedRecipe.Name)
+
+	// Return updated recipe HTML
+	tmpl := template.Must(template.ParseFiles("index.html"))
+	tmpl.ExecuteTemplate(rw, "recipe", updatedRecipe)
 }
 
 func handleGroceryItemPatchRequest(rw http.ResponseWriter, req *http.Request) {
