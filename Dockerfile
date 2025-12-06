@@ -36,7 +36,7 @@ COPY --from=builder /app/grocery-app .
 
 # Copy static files and HTML templates
 COPY --from=builder /app/static ./static
-COPY --from=builder /app/*.html ./
+COPY --from=builder /app/templates ./templates
 
 # Create data directory and set permissions
 RUN mkdir -p .data && chown -R appuser:appgroup /app
